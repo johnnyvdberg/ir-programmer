@@ -4,6 +4,10 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to create, e.g. v1.0.0"
+        required: true
 
 permissions:
   contents: write
@@ -37,16 +41,19 @@ jobs:
           G20_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk g20-ir-setup-${GITHUB_REF_NAME}.apk
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: cp app/build/outputs/apk/release/app-release.apk g20-ir-setup-${TAG}.apk
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
           files: g20-ir-setup-*.apk
           generate_release_notes: true
           body: |
             Android TV app that programs the IR keys of the Google G20 remote from the Shield.
 
             Install: enable Network debugging on the Shield, then
-            `adb connect <shield-ip>:5555` and `adb install -r g20-ir-setup-${{ github.ref_name }}.apk`.
+            `adb connect <shield-ip>:5555` and `adb install -r g20-ir-setup-${{ inputs.tag || github.ref_name }}.apk`.
             See the README for how the guided setup works.
