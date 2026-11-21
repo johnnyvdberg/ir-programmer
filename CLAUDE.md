@@ -60,10 +60,10 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
 - then mark/space pairs in carrier cycles
 
 ## Encoding choices
-- NEC*/Samsung: type 3 = frame + protocol repeat code
-- SIRC: type 3 = N frames once (N fitted to 177 B, 2 for SIRC12) + 1 frame repeat
-- RC5/RC6: type 4 with toggle 0/1
-- others / raw: type 2 single frame repeated
+- Default format SIMPLE (Diagnostics → Code format): every code is type 2 = one frame incl.
+  gap, re-sent while held. Confirmed on the owner's remote (SIRC 1/18 type 2 works).
+- REFERENCE format (optional, for Google reference firmware): NEC*/Samsung type 3 = frame +
+  repeat code; SIRC type 3 = N frames + 1 repeat; RC5/RC6 type 4 toggle.
 - Not usable (too long): Kaseikyo (Panasonic), NEC42, some raw captures
 
 ## Owner's remote (from Check remote)
@@ -74,6 +74,11 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
   under both 0x00B2 and 0x0139 (the non-matching ID is ignored by `ir_table_add_key` without
   using a slot), and the Check screen logs every IR report and raw Android key code.
 - Power never reaches apps as a Bluetooth key (system-intercepted).
+- Type 3 codes fail on this firmware: SIRC 1/18 as type 3 (1 frame + 1 repeat, 112 B) did
+  nothing, the same frame as type 2 (60 B) works. (One SIRC15 type 3 code did work, so type 3
+  handling is inconsistent rather than absent.) Hence SIMPLE is the default.
+- Colour, YouTube, Netflix, Prime Video and "rocket" keys: Bluetooth-only (not IR-programmable);
+  on the Shield they appear to be dropped before reaching apps.
 
 ## Status / open questions
 - APK builds; unit tests pass. NOT yet tested on a Shield + G20.

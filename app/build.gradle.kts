@@ -13,8 +13,8 @@ android {
         applicationId = "io.github.g20ir"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.2"
+        versionCode = 5
+        versionName = "1.3"
     }
 
     // Release signing comes from the environment (GitHub Actions secrets), never from the repo:

@@ -113,6 +113,7 @@ data class UiState(
     val pendingImport: ConfigIo.Imported? = null,
     val transferUrls: List<String> = emptyList(),
     val exportPath: String? = null,
+    val codeFormat: G20Payload.Format = G20Payload.Format.SIMPLE,
 ) {
     /** Whether the remote holds exactly the saved codes. null = unknown. */
     val inSync: Boolean? get() = applied?.let { a -> a.keys.mapValues { it.value.signal } == config.keys.mapValues { it.value.signal } }
@@ -142,6 +143,8 @@ class AppViewModel @JvmOverloads constructor(
                 config = (addr?.let { loadConfig("config:$it") } ?: loadConfig("config")) ?: RemoteConfig(),
                 applied = addr?.let { loadConfig("applied:$it") },
                 inputKeyId = prefs.getInt(addr?.let { "inputKeyId:$it" } ?: "inputKeyId", prefs.getInt("inputKeyId", AUTO_INPUT_ID)),
+                codeFormat = runCatching { G20Payload.Format.valueOf(prefs.getString("codeFormat", null)!!) }
+                    .getOrDefault(G20Payload.Format.SIMPLE),
             )
         },
     )
@@ -270,7 +273,15 @@ class AppViewModel @JvmOverloads constructor(
 
     /** Encodes a signal for the remote, or returns an explanation of why it can't. */
     fun tryBuild(s: IrSignal): Result<G20Payload.Built> =
-        try { Result.success(G20Payload.build(s, maxBytes())) } catch (e: EncodeException) { Result.failure(e) }
+        try { Result.success(G20Payload.build(s, maxBytes(), _ui.value.codeFormat)) } catch (e: EncodeException) { Result.failure(e) }
+
+    /** Switches between the simple (type 2) and the reference (type 3/4) code layout. */
+    fun toggleCodeFormat() {
+        val next = if (_ui.value.codeFormat == G20Payload.Format.SIMPLE) G20Payload.Format.REFERENCE else G20Payload.Format.SIMPLE
+        prefs.edit().putString("codeFormat", next.name).apply()
+        _ui.update { it.copy(codeFormat = next) }
+        toast("Code format: ${next.name.lowercase()}. Use \"Write saved codes\" to apply it.")
+    }
 
     /** Programs the remote with [signals]; returns the keys that could not be encoded. */
     private suspend fun programSignals(signals: Map<G20Key, IrSignal>): List<G20Key> {

@@ -56,7 +56,7 @@ object TextFormats {
 
     /** Renders any signal as Pronto hex, for exporting. */
     fun toPronto(signal: IrSignal, maxBytes: Int = G20Payload.ABSOLUTE_MAX_BYTES): String {
-        val built = G20Payload.build(signal, maxBytes)
+        val built = G20Payload.build(signal, maxBytes, G20Payload.Format.REFERENCE)
         val d = G20Payload.decode(built.bytes)!!
         val freqWord = (1_000_000.0 / (d.carrierHz * PRONTO_UNIT_US)).roundToInt()
         val scale = 1.0 // G20 and Pronto both count carrier cycles

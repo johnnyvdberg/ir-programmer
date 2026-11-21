@@ -29,7 +29,7 @@ class EncoderTest {
     @Test
     fun sonySircMatchesHandDerivedFrame() {
         // Same frame as tools/legacy/sony.py: 40 kHz, 25 µs per cycle, 45 ms frame period.
-        val b = G20Payload.build(IrSignal.Parsed(Protocol.SIRC, 1, 18))
+        val b = G20Payload.build(IrSignal.Parsed(Protocol.SIRC, 1, 18), format = G20Payload.Format.REFERENCE)
         val d = G20Payload.decode(b.bytes)!!
         assertEquals(3, d.type)
         assertEquals(40000, d.carrierHz)
@@ -41,6 +41,20 @@ class EncoderTest {
         assertEquals(expected + expected, d.partA) // 2 frames once
         assertEquals(expected, d.partB) // + 1 repeated while held => 3 on a tap
         assertTrue(b.bytes.size <= G20Payload.DEFAULT_MAX_BYTES)
+    }
+
+    /** The exact payload confirmed working on the owner's remote (test file B). */
+    @Test
+    fun simpleFormatMatchesHardwareConfirmedSonyCode() {
+        val b = G20Payload.build(IrSignal.Parsed(Protocol.SIRC, 1, 18))
+        assertEquals(
+            "02210190000d070800600018001800180030001800180018001800180030001800180018001800180030001800180018001800180018001800180420",
+            b.hex,
+        )
+        for (p in Protocol.entries) {
+            val r = runCatching { G20Payload.build(IrSignal.Parsed(p, 1, 2)) }.getOrNull() ?: continue
+            assertEquals(p.id, 2, r.type)
+        }
     }
 
     @Test
@@ -55,7 +69,9 @@ class EncoderTest {
         val cmd = (bits shr 16) and 0xFF
         assertEquals("address inverse", addr xor 0xFF, (bits shr 8) and 0xFF)
         assertEquals("command inverse", cmd xor 0xFF, (bits shr 24) and 0xFF)
-        val ours = G20Payload.decode(G20Payload.build(IrSignal.Parsed(Protocol.NEC, addr, cmd)).bytes)!!
+        val ours = G20Payload.decode(
+            G20Payload.build(IrSignal.Parsed(Protocol.NEC, addr, cmd), format = G20Payload.Format.REFERENCE).bytes,
+        )!!
         assertEquals(3, ours.type)
         assertEquals(cap.partA.size, ours.partA.size)
         assertEquals(cap.partB.size, ours.partB.size)
@@ -78,7 +94,7 @@ class EncoderTest {
     @Test
     fun prontoRoundTrip() {
         val pronto = TextFormats.toPronto(IrSignal.G20Hex(capturedLg))
-        val back = G20Payload.decode(G20Payload.build(TextFormats.parse(pronto)).bytes)!!
+        val back = G20Payload.decode(G20Payload.build(TextFormats.parse(pronto), format = G20Payload.Format.REFERENCE).bytes)!!
         val orig = G20Payload.decode(hexBytes(capturedLg))!!
         assertEquals(orig.type, back.type)
         (orig.partA + orig.partB).zip(back.partA + back.partB).forEach { (a, b) -> assertTrue(abs(a - b) <= 1) }
@@ -91,7 +107,8 @@ class EncoderTest {
         // 14 bits x 1.776 ms, minus the leading half-bit space (and maybe a trailing one)
         assertTrue("rc5 body $body", body in 23_000..24_900)
         assertTrue(w.frame.size % 2 == 0)
-        assertEquals(4, G20Payload.build(IrSignal.Parsed(Protocol.RC5, 0, 12)).type)
+        assertEquals(4, G20Payload.build(IrSignal.Parsed(Protocol.RC5, 0, 12), format = G20Payload.Format.REFERENCE).type)
+        assertEquals(2, G20Payload.build(IrSignal.Parsed(Protocol.RC5, 0, 12)).type)
     }
 
     @Test

@@ -28,19 +28,28 @@ object G20Payload {
     /** The PWM DMA FIFO stores pulse counts in 14 bits. */
     private const val MAX_CYCLES = 0x3FFF
 
+    /**
+     * SIMPLE: every code is type 2 (one frame, repeated while held). Works on all remotes
+     * tested so far, including non-reference firmware that ignores type 3 codes.
+     * REFERENCE: type 3 (frame + repeat code / extra frames) and type 4 (RC5/RC6 toggle), as
+     * Google's reference firmware supports.
+     */
+    enum class Format { SIMPLE, REFERENCE }
+
     data class Built(val bytes: ByteArray, val type: Int, val summary: String) {
         val hex: String get() = bytes.joinToString("") { "%02x".format(it) }
     }
 
-    fun build(signal: IrSignal, maxBytes: Int = DEFAULT_MAX_BYTES): Built = when (signal) {
-        is IrSignal.Parsed -> fromWaveform(Encoders.encode(signal), maxBytes)
-        is IrSignal.Raw -> fromRaw(signal, maxBytes)
+    fun build(signal: IrSignal, maxBytes: Int = DEFAULT_MAX_BYTES, format: Format = Format.SIMPLE): Built = when (signal) {
+        is IrSignal.Parsed -> fromWaveform(Encoders.encode(signal), maxBytes, format)
+        is IrSignal.Raw -> fromRaw(signal, maxBytes, format)
         is IrSignal.G20Hex -> fromHex(signal.hex, maxBytes)
     }
 
-    fun fromWaveform(w: Waveform, maxBytes: Int): Built {
+    fun fromWaveform(w: Waveform, maxBytes: Int, format: Format = Format.SIMPLE): Built {
         val f100 = (w.carrierHz + 50) / 100
         val frame = cycles(w.frame, w.carrierHz)
+        if (format == Format.SIMPLE) return repeating(frame, w.dutyPercent, f100, maxBytes)
 
         w.toggleFrame?.let { tf ->
             val b = cycles(tf, w.carrierHz)
@@ -66,18 +75,23 @@ object G20Payload {
                 }
             }
         }
+        return repeating(frame, w.dutyPercent, f100, maxBytes)
+    }
+
+    /** Type 2: one frame (with its gap), re-sent for as long as the key is held. */
+    private fun repeating(frame: List<Int>, duty: Int, f100: Int, maxBytes: Int): Built {
         val size = 8 + 4 * frame.size / 2
         if (size <= maxBytes) {
-            return Built(pack(2, w.dutyPercent, f100, frame.size / 2, frame.sum(), frame), 2, "repeating frame")
+            return Built(pack(2, duty, f100, frame.size / 2, frame.sum(), frame), 2, "repeating frame")
         }
         throw EncodeException("code needs $size bytes, the remote accepts $maxBytes per key")
     }
 
-    private fun fromRaw(r: IrSignal.Raw, maxBytes: Int): Built {
+    private fun fromRaw(r: IrSignal.Raw, maxBytes: Int, format: Format): Built {
         val f100 = (r.carrierHz + 50) / 100
-        var once = evenize(r.once)
+        var once = evenize(r.once.ifEmpty { r.repeat })
         val rep = if (r.repeat.isEmpty()) emptyList() else evenize(r.repeat)
-        if (rep.isNotEmpty()) {
+        if (rep.isNotEmpty() && format == Format.REFERENCE) {
             val o = cycles(once, r.carrierHz)
             val p = cycles(rep, r.carrierHz)
             val size = 8 + 4 * (o.size + p.size) / 2
@@ -85,6 +99,7 @@ object G20Payload {
             once = rep // fall back to the repeat part only
         }
         var c = cycles(once, r.carrierHz)
+        if (once.isEmpty()) throw EncodeException("raw code has no timings")
         if (8 + 2 * c.size > maxBytes) {
             // Captures often contain the same frame several times: keep only the first one.
             val first = firstFrame(once)

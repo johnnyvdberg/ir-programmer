@@ -455,6 +455,13 @@ fun DiagnosticsScreen(vm: AppViewModel, ui: UiState) {
                 )
             }
         }
+        item {
+            Item(
+                "Code format: " + if (ui.codeFormat == io.github.g20ir.ir.G20Payload.Format.SIMPLE) "simple (type 2)" else "reference (type 3/4)",
+                "Simple works on all remotes tested. Reference uses dedicated repeat codes and RC5/RC6 toggling, " +
+                    "which only Google's reference firmware handles. Write the saved codes again after switching.",
+            ) { vm.toggleCodeFormat() }
+        }
         item { Item("Turn key reports off", "Stops the remote reporting IR key presses to the Shield") { vm.setNotifications(false) } }
         item { Item("Turn key reports on") { vm.setNotifications(true) } }
         item { Section("Saved payloads") }

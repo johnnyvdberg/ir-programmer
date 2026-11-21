@@ -37,7 +37,7 @@ class ConfigIoTest {
             "0016 0016 0016 0041 0016 0041 0016 0041 0016 0041 0016 05F5 0157 0056 0016 0E60"
         val r = ConfigIo.import("""{"keys": {"power": {"pronto": "$pronto"}, "bogus": {}}}""")
         assertEquals(setOf(G20Key.POWER), r.config.keys.keys)
-        assertEquals(3, G20Payload.build(r.config.keys.getValue(G20Key.POWER).signal).type)
+        assertEquals(2, G20Payload.build(r.config.keys.getValue(G20Key.POWER).signal).type)
         assertEquals(listOf("ignored \"bogus\""), r.warnings)
     }
 
