@@ -13,8 +13,8 @@ android {
         applicationId = "io.github.g20ir"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.3"
+        versionCode = 6
+        versionName = "1.4"
     }
 
     // Release signing comes from the environment (GitHub Actions secrets), never from the repo:
@@ -58,6 +58,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.tv:tv-material:1.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // Pure-Kotlin adb client: the button helper connects to the Shield's own adb daemon.
+    implementation("dev.mobile:dadb:1.2.10")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

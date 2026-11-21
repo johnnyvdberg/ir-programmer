@@ -138,6 +138,20 @@ class ScreenshotTest {
         it.copy(config = sonyConfig, screen = Screen.Transfer, transferUrls = listOf("http://192.168.1.42:8080/"),
             exportPath = "/storage/emulated/0/Android/data/io.github.g20ir/files/g20-ir-config.json")
     }
+    @Test fun s13_buttons() {
+        io.github.g20ir.buttons.ButtonStore.apply {
+            setAction(io.github.g20ir.buttons.RemoteButton.YOUTUBE, io.github.g20ir.buttons.ButtonAction.App("com.google.android.youtube.tv", "YouTube"))
+            setAction(io.github.g20ir.buttons.RemoteButton.NETFLIX, io.github.g20ir.buttons.ButtonAction.App("com.netflix.ninja", "Netflix"))
+            setAction(io.github.g20ir.buttons.RemoteButton.PRIME, io.github.g20ir.buttons.ButtonAction.App("com.amazon.amazonvideo.livingroom", "Prime Video"))
+            setAction(io.github.g20ir.buttons.RemoteButton.SETTINGS, io.github.g20ir.buttons.ButtonAction.SystemSettings)
+            setAction(io.github.g20ir.buttons.RemoteButton.RED, io.github.g20ir.buttons.ButtonAction.Home)
+            setHelperEnabled(true)
+            serviceRunning.value = true
+            helperStatus.value = io.github.g20ir.buttons.ButtonStore.HelperStatus.Running
+            lastPress.value = "Prime Video → Open Prime Video"
+        }
+        shot { it.copy(screen = Screen.Buttons) }
+    }
     @Test fun s12_import_confirm() = shot {
         it.copy(config = sonyConfig, screen = Screen.Transfer,
             pendingImport = ConfigIo.import(ConfigIo.export(sonyConfig, G20Key.INPUT.keyId)))

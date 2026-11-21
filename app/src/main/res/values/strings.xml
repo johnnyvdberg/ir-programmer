@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">G20 IR Setup</string>
+    <string name="button_service_label">G20 remote buttons</string>
+    <string name="button_service_description">Gives the G20 remote\'s colour, app and settings buttons an action, chosen in G20 IR Setup. It only reads key presses; it does not read screen content.</string>
 </resources>

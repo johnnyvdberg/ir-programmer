@@ -65,6 +65,9 @@ sealed interface Screen {
     data object Diagnostics : Screen
     data object CheckRemote : Screen
     data object Transfer : Screen
+    data object Buttons : Screen
+    /** button == null: the shared action of the app buttons when the helper isn't running. */
+    data class PickAction(val button: io.github.g20ir.buttons.RemoteButton?) : Screen
 }
 
 data class CheckState(
@@ -173,6 +176,7 @@ class AppViewModel @JvmOverloads constructor(
             is Screen.Test -> cancelTest()
             is Screen.EditKey -> leaveEditor()
             is Screen.Transfer -> closeTransfer()
+            is Screen.PickAction -> go(Screen.Buttons)
             is Screen.CheckRemote -> { _ui.update { it.copy(check = null) }; go(Screen.Home) }
             else -> go(Screen.Home)
         }
@@ -661,6 +665,45 @@ class AppViewModel @JvmOverloads constructor(
         if (k == null) return false
         if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) markCheck(k, "Sends Bluetooth (no IR code)")
         return true
+    }
+
+    // ---------------------------------------------------------------- remote buttons
+
+    fun openButtons() {
+        io.github.g20ir.buttons.ButtonStore.init(getApplication())
+        go(Screen.Buttons)
+    }
+
+    /** Apps that can be opened from a button, TV apps first. */
+    fun launchableApps(): List<io.github.g20ir.buttons.ButtonAction.App> {
+        val pm = getApplication<Application>().packageManager
+        val out = LinkedHashMap<String, io.github.g20ir.buttons.ButtonAction.App>()
+        for (cat in listOf(android.content.Intent.CATEGORY_LEANBACK_LAUNCHER, android.content.Intent.CATEGORY_LAUNCHER)) {
+            val i = android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(cat)
+            for (ri in pm.queryIntentActivities(i, 0)) {
+                val pkg = ri.activityInfo.packageName
+                if (pkg == getApplication<Application>().packageName || pkg in out) continue
+                out[pkg] = io.github.g20ir.buttons.ButtonAction.App(pkg, ri.loadLabel(pm).toString())
+            }
+        }
+        return out.values.sortedBy { it.label.lowercase() }
+    }
+
+    fun pickAction(b: io.github.g20ir.buttons.RemoteButton?, a: io.github.g20ir.buttons.ButtonAction) {
+        if (b == null) io.github.g20ir.buttons.ButtonStore.setSharedAppAction(a)
+        else io.github.g20ir.buttons.ButtonStore.setAction(b, a)
+        go(Screen.Buttons)
+    }
+
+    fun openAccessibilitySettings() {
+        val app = getApplication<Application>()
+        for (action in listOf(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS, android.provider.Settings.ACTION_SETTINGS)) {
+            try {
+                app.startActivity(android.content.Intent(action).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (_: Exception) {}
+        }
+        toast("Could not open the settings.")
     }
 
     // ---------------------------------------------------------------- export / import

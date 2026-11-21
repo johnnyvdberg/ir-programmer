@@ -49,7 +49,7 @@ import kotlinx.coroutines.delay
 // ------------------------------------------------------------------ building blocks
 
 @Composable
-private fun Title(text: String, sub: String? = null) {
+internal fun Title(text: String, sub: String? = null) {
     Text(text, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
     if (sub != null) {
         Text(sub, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
@@ -58,7 +58,7 @@ private fun Title(text: String, sub: String? = null) {
 }
 
 @Composable
-private fun Item(
+internal fun Item(
     title: String,
     sub: String? = null,
     focus: FocusRequester? = null,
@@ -76,7 +76,7 @@ private fun Item(
 }
 
 @Composable
-private fun rememberInitialFocus(key: Any? = Unit): FocusRequester {
+internal fun rememberInitialFocus(key: Any? = Unit): FocusRequester {
     val fr = remember { FocusRequester() }
     LaunchedEffect(key) {
         delay(50)
@@ -86,14 +86,14 @@ private fun rememberInitialFocus(key: Any? = Unit): FocusRequester {
 }
 
 @Composable
-private fun Section(text: String) {
+internal fun Section(text: String) {
     Spacer(Modifier.height(12.dp))
     Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
     Spacer(Modifier.height(4.dp))
 }
 
 @Composable
-private fun Body(text: String, color: Color = MaterialTheme.colorScheme.onBackground) {
+internal fun Body(text: String, color: Color = MaterialTheme.colorScheme.onBackground) {
     Text(text, style = MaterialTheme.typography.bodyLarge, color = color)
 }
 
@@ -147,6 +147,7 @@ fun HomeScreen(vm: AppViewModel, ui: UiState) {
             item { Item("Choose remote", "Pick the paired G20 remote") { vm.go(Screen.PickRemote) } }
             item { Item("Check remote", "Firmware, battery, and which keys send IR") { vm.openCheck() } }
             item { Item("Export / import", "Save or load settings from a phone or PC browser") { vm.openTransfer() } }
+            item { Item("Remote buttons", "Colour, YouTube, Netflix, Prime Video, rocket and gear buttons") { vm.openButtons() } }
             item { Item("Clear IR codes on the remote", "All keys control the Shield again") { vm.clearRemote() } }
             item { Item("Diagnostics", "Log, payloads, input key ID") { vm.go(Screen.Diagnostics) } }
         }

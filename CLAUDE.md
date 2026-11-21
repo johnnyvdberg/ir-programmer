@@ -19,6 +19,11 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
   - `model/ConfigIo.kt`: export/import JSON format
   - `net/WebTransfer.kt`: tiny HTTP server (port 8080, fallback random) for export/import,
     only while the Export/import screen is open
+  - `buttons/`: Bluetooth-only buttons (colour, app, gear, info, guide, subtitles, bookmark).
+    `ButtonService` = accessibility service (auto-starts at boot) mapping keys by Linux scan
+    code to actions; `AdbKeyHelper` connects to the Shield's own adbd (127.0.0.1:5555, dadb,
+    key in filesDir) and runs `getevent -l` on a pty (getevent never flushes) to tell the four
+    app buttons apart by HID usage; `ButtonStore` = prefs + shared state.
 - `tools/build_irdb.py`: Flipper-IRDB (CC0) → `app/src/main/assets/irdb.json`
 - `tools/legacy/`: original Python converter + Sony generator + captured payloads
 - Tests: `./gradlew :app:testDebugUnitTest` (encoders vs Sony frame and Google-captured LG
@@ -77,8 +82,10 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
 - Type 3 codes fail on this firmware: SIRC 1/18 as type 3 (1 frame + 1 repeat, 112 B) did
   nothing, the same frame as type 2 (60 B) works. (One SIRC15 type 3 code did work, so type 3
   handling is inconsistent rather than absent.) Hence SIMPLE is the default.
-- Colour, YouTube, Netflix, Prime Video and "rocket" keys: Bluetooth-only (not IR-programmable);
-  on the Shield they appear to be dropped before reaching apps.
+- Bluetooth-only keys measured with getevent (event8): red/green/yellow/blue 0x69/6A/6C/6B
+  (KEY_RED..BLUE), YouTube 0x77, Netflix 0x78, Prime Video 0x79, rocket 0x7A (all KEY_UNKNOWN
+  = scan 240, indistinguishable to apps), gear 0x96 (KEY_TAPE 384), info 0x1BD, guide 0x8D
+  (KEY_PROGRAM), subtitles 0x61, bookmark 0x22A. Not IR-programmable.
 
 ## Status / open questions
 - APK builds; unit tests pass. NOT yet tested on a Shield + G20.
