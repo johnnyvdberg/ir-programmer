@@ -72,6 +72,8 @@ data class CheckState(
     val loading: Boolean = true,
     /** Per key: how the last press arrived. */
     val results: Map<G20Key, String> = emptyMap(),
+    /** Raw log of what arrived, newest first. */
+    val events: List<String> = emptyList(),
 )
 
 enum class Phase { PROGRAMMING, WAIT_PRESS, ASK, NO_MATCH, DONE, ERROR }
@@ -99,7 +101,7 @@ data class UiState(
     val busy: String? = null,
     val toast: String? = null,
     val test: TestState? = null,
-    val inputKeyId: Int = G20Key.INPUT.keyId,
+    val inputKeyId: Int = AUTO_INPUT_ID,
     val log: List<String> = emptyList(),
     /** Manual editor: signal currently on the remote for trial, not yet saved. */
     val trial: Pair<G20Key, Assignment>? = null,
@@ -115,6 +117,9 @@ data class UiState(
     /** Whether the remote holds exactly the saved codes. null = unknown. */
     val inSync: Boolean? get() = applied?.let { a -> a.keys.mapValues { it.value.signal } == config.keys.mapValues { it.value.signal } }
 }
+
+/** inputKeyId value meaning "write Input under both key IDs". */
+const val AUTO_INPUT_ID = 0
 
 @SuppressLint("MissingPermission")
 class AppViewModel @JvmOverloads constructor(
@@ -136,7 +141,7 @@ class AppViewModel @JvmOverloads constructor(
                 remoteAddress = addr,
                 config = (addr?.let { loadConfig("config:$it") } ?: loadConfig("config")) ?: RemoteConfig(),
                 applied = addr?.let { loadConfig("applied:$it") },
-                inputKeyId = prefs.getInt(addr?.let { "inputKeyId:$it" } ?: "inputKeyId", prefs.getInt("inputKeyId", G20Key.INPUT.keyId)),
+                inputKeyId = prefs.getInt(addr?.let { "inputKeyId:$it" } ?: "inputKeyId", prefs.getInt("inputKeyId", AUTO_INPUT_ID)),
             )
         },
     )
@@ -221,7 +226,7 @@ class AppViewModel @JvmOverloads constructor(
         if (cfg == null) {
             cfg = loadConfig("config") ?: RemoteConfig()
             e.putString("config:$addr", cfg.toJson().toString()).remove("config")
-            if (prefs.contains("inputKeyId")) e.putInt("inputKeyId:$addr", prefs.getInt("inputKeyId", G20Key.INPUT.keyId)).remove("inputKeyId")
+            if (prefs.contains("inputKeyId")) e.putInt("inputKeyId:$addr", prefs.getInt("inputKeyId", AUTO_INPUT_ID)).remove("inputKeyId")
         }
         e.apply()
         _ui.update {
@@ -229,7 +234,7 @@ class AppViewModel @JvmOverloads constructor(
                 remoteAddress = addr,
                 config = cfg,
                 applied = loadConfig("applied:$addr"),
-                inputKeyId = prefs.getInt("inputKeyId:$addr", G20Key.INPUT.keyId),
+                inputKeyId = prefs.getInt("inputKeyId:$addr", AUTO_INPUT_ID),
             )
         }
     }
@@ -247,7 +252,18 @@ class AppViewModel @JvmOverloads constructor(
 
     // ---------------------------------------------------------------- programming
 
-    private fun keyIdOf(k: G20Key) = if (k == G20Key.INPUT) _ui.value.inputKeyId else k.keyId
+    /**
+     * Key IDs a key is written under. Input goes under both 0x00B2 and 0x0139 unless one is
+     * forced in Diagnostics: the firmware ignores the ID that isn't in its active key map
+     * (normal vs "magic" input key) without using a slot, so one of them always lands.
+     */
+    private fun keyIdsOf(k: G20Key): List<Int> = when {
+        k != G20Key.INPUT -> listOf(k.keyId)
+        _ui.value.inputKeyId == AUTO_INPUT_ID -> listOf(G20Key.INPUT.keyId, G20Key.MAGIC_KEY_ID)
+        else -> listOf(_ui.value.inputKeyId)
+    }
+
+    private fun keyIdOf(k: G20Key) = keyIdsOf(k).first()
 
     private fun maxBytes(): Int = (remote?.maxWrite ?: G20Payload.DEFAULT_MAX_BYTES)
         .coerceAtMost(G20Payload.ABSOLUTE_MAX_BYTES)
@@ -260,11 +276,11 @@ class AppViewModel @JvmOverloads constructor(
     private suspend fun programSignals(signals: Map<G20Key, IrSignal>): List<G20Key> {
         val r = remote ?: throw IllegalStateException("not connected")
         val failed = mutableListOf<G20Key>()
-        val entries = G20Key.entries.mapNotNull { k ->
-            val s = signals[k] ?: return@mapNotNull null
+        val entries = G20Key.entries.flatMap { k ->
+            val s = signals[k] ?: return@flatMap emptyList()
             tryBuild(s).fold(
-                { keyIdOf(k) to it.bytes },
-                { log("${k.label}: ${it.message}"); failed += k; null },
+                { b -> keyIdsOf(k).map { it to b.bytes } },
+                { log("${k.label}: ${it.message}"); failed += k; emptyList() },
             )
         }
         val built = signals.filterKeys { it !in failed }
@@ -412,7 +428,9 @@ class AppViewModel @JvmOverloads constructor(
 
     private fun onKeyEvent(ev: G20Remote.KeyEvent) {
         if (_ui.value.screen == Screen.CheckRemote) {
-            if (ev.down) keyForId(ev.keyId)?.let { markCheck(it, "Sends IR (reported by the remote)") }
+            val k = keyForId(ev.keyId)
+            addCheckEvent("IR report from remote: key 0x%04X%s %s".format(ev.keyId, k?.let { " (${it.label})" } ?: "", if (ev.down) "down" else "up"))
+            if (ev.down) k?.let { markCheck(it, "Sends IR (reported by the remote)") }
             return
         }
         val t = _ui.value.test ?: return
@@ -603,6 +621,11 @@ class AppViewModel @JvmOverloads constructor(
         }
     }
 
+    private fun addCheckEvent(line: String) {
+        log(line)
+        _ui.update { s -> s.copy(check = s.check?.let { it.copy(events = (listOf(line) + it.events).take(12)) }) }
+    }
+
     private fun markCheck(k: G20Key, how: String) =
         _ui.update { s -> s.copy(check = s.check?.let { it.copy(results = it.results + (k to how)) }) }
 
@@ -619,8 +642,12 @@ class AppViewModel @JvmOverloads constructor(
             KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_MUTE -> G20Key.MUTE
             KeyEvent.KEYCODE_TV_INPUT -> G20Key.INPUT
             KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_TV_POWER -> G20Key.POWER
-            else -> return false
+            else -> null
         }
+        if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) {
+            addCheckEvent("Bluetooth key: ${KeyEvent.keyCodeToString(e.keyCode)} (${e.keyCode}), scan code ${e.scanCode}")
+        }
+        if (k == null) return false
         if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) markCheck(k, "Sends Bluetooth (no IR code)")
         return true
     }

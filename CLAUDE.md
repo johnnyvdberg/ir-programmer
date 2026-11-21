@@ -37,7 +37,8 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
 - Key event notify `[0 down|1 up, idHi, idLo]` for every programmed IR key press once the
   CCCD is enabled (flag persisted in remote flash). The app uses this to detect test presses.
 - Key IDs: vol+ 0018, vol- 0019, mute 00A4, power 001A, input 00B2 (0139 if input is the
-  "magic" key; key_button_map_g20_magic).
+  "magic" key; key_button_map_g20_magic). An ID not in the active map is ignored by
+  `ir_table_add_key` before `programmed_key_count++`, so the app writes Input under both.
 - MTU_SIZE_SETTING = 180 → max 177 bytes per write. `ir_code_merge` never updates
   `ir_current_button` and the key id is cleared after the first code write, so a code must
   arrive in ONE write. Long/prepared writes won't work either.
@@ -64,6 +65,15 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
 - RC5/RC6: type 4 with toggle 0/1
 - others / raw: type 2 single frame repeated
 - Not usable (too long): Kaseikyo (Panasonic), NEC42, some raw captures
+
+## Owner's remote (from Check remote)
+- Firmware `sdk044_google_ssu`, hardware `wd2308`, software `V01.06`: not the exact
+  refDesignRcu reference build, but it implements the same Google IR-over-BLE service.
+- Input pressed on the Check screen showed neither an IR report nor a recognised Bluetooth
+  key → most likely the 0x00B2 code was rejected (magic key map). Since v1.2 Input is written
+  under both 0x00B2 and 0x0139 (the non-matching ID is ignored by `ir_table_add_key` without
+  using a slot), and the Check screen logs every IR report and raw Android key code.
+- Power never reaches apps as a Bluetooth key (system-intercepted).
 
 ## Status / open questions
 - APK builds; unit tests pass. NOT yet tested on a Shield + G20.

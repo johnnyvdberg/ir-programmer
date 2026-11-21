@@ -251,7 +251,8 @@ class G20Remote(
      * start, so keys not listed here go back to normal Bluetooth behaviour).
      */
     suspend fun program(entries: List<Pair<Int, ByteArray>>) {
-        require(entries.size <= 5) { "the remote holds at most 5 keys" }
+        // 5 keys, plus Input possibly written under both of its key IDs (one is ignored).
+        require(entries.size <= 6) { "too many keys" }
         for ((id, code) in entries) {
             if (code.size > maxWrite) {
                 throw IllegalStateException("code for key 0x%04X is ${code.size} bytes; this link carries $maxWrite per write".format(id))

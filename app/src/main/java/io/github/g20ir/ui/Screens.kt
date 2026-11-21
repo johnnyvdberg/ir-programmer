@@ -442,10 +442,18 @@ fun DiagnosticsScreen(vm: AppViewModel, ui: UiState) {
     LazyColumn {
         item {
             Item(
-                "Input key ID: 0x%04X".format(ui.inputKeyId),
-                "Select to switch between 0x00B2 (Input) and 0x0139 (remotes whose input key is set up as the \"magic\" key)",
+                "Input key ID: " + if (ui.inputKeyId == AUTO_INPUT_ID) "both 0x00B2 and 0x0139 (automatic)" else "0x%04X only".format(ui.inputKeyId),
+                "Select to cycle. Automatic writes Input under both IDs; the remote keeps the one its key map uses.",
                 first,
-            ) { vm.setInputKeyId(if (ui.inputKeyId == G20Key.INPUT.keyId) G20Key.MAGIC_KEY_ID else G20Key.INPUT.keyId) }
+            ) {
+                vm.setInputKeyId(
+                    when (ui.inputKeyId) {
+                        AUTO_INPUT_ID -> G20Key.INPUT.keyId
+                        G20Key.INPUT.keyId -> G20Key.MAGIC_KEY_ID
+                        else -> AUTO_INPUT_ID
+                    },
+                )
+            }
         }
         item { Item("Turn key reports off", "Stops the remote reporting IR key presses to the Shield") { vm.setNotifications(false) } }
         item { Item("Turn key reports on") { vm.setNotifications(true) } }
@@ -513,7 +521,12 @@ fun CheckRemoteScreen(vm: AppViewModel, ui: UiState) {
                 if (!ok) Body("  Expected $expected from the saved settings – try \"Write saved codes\".", Color(0xFFFF8A80))
             }
             Spacer(Modifier.height(8.dp))
-            Body("Power often never reaches apps when it sends Bluetooth, so it may stay \"not pressed\".")
+            Body("Power never reaches apps when it sends Bluetooth, so it may stay \"not pressed\".")
+            Section("What arrived (newest first)")
+            if (c.events.isEmpty()) Body("Nothing yet.")
+            for (e in c.events) {
+                Text(e, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground)
+            }
         }
     }
 }

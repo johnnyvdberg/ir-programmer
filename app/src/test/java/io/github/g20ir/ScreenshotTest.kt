@@ -125,6 +125,12 @@ class ScreenshotTest {
                     G20Key.MUTE to "Sends Bluetooth (no IR code)",
                     G20Key.INPUT to "Sends IR (reported by the remote)",
                 ),
+                events = listOf(
+                    "IR report from remote: key 0x00B2 (Input) up",
+                    "IR report from remote: key 0x00B2 (Input) down",
+                    "Bluetooth key: KEYCODE_VOLUME_MUTE (164), scan code 113",
+                    "IR report from remote: key 0x0018 (Volume +) down",
+                ),
             ),
         )
     }

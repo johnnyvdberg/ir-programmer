@@ -44,7 +44,7 @@ object ConfigIo {
         return JSONObject()
             .put("format", FORMAT)
             .put("version", 1)
-            .put("inputKeyId", "0x%04X".format(inputKeyId))
+            .put("inputKeyId", if (inputKeyId == 0) "auto" else "0x%04X".format(inputKeyId))
             .put("keys", keys)
             .toString(2)
     }
@@ -77,8 +77,8 @@ object ConfigIo {
             map[k] = Assignment(signal, e.optString("source").ifBlank { "Imported" })
         }
         val inputId = root.optString("inputKeyId").takeIf { it.isNotBlank() }?.let {
-            it.removePrefix("0x").removePrefix("0X").toIntOrNull(16)
-        }?.takeIf { it == G20Key.INPUT.keyId || it == G20Key.MAGIC_KEY_ID }
+            if (it.equals("auto", ignoreCase = true)) 0 else it.removePrefix("0x").removePrefix("0X").toIntOrNull(16)
+        }?.takeIf { it == 0 || it == G20Key.INPUT.keyId || it == G20Key.MAGIC_KEY_ID }
         if (map.isEmpty()) throw IllegalArgumentException(
             "no usable keys" + if (warnings.isEmpty()) "" else " (${warnings.joinToString("; ")})",
         )
