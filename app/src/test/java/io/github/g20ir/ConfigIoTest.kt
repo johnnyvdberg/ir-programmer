@@ -46,3 +46,13 @@ class ConfigIoTest {
         ConfigIo.import("hello")
     }
 }
+
+class ParseNumberTest {
+    @Test
+    fun decimalByDefault() {
+        assertEquals(37L, io.github.g20ir.ui.parseNumber("37"))
+        assertEquals(37L, io.github.g20ir.ui.parseNumber("0x25"))
+        assertEquals(37L, io.github.g20ir.ui.parseNumber(" 25h "))
+        assertEquals(null, io.github.g20ir.ui.parseNumber("abc"))
+    }
+}

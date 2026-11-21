@@ -347,13 +347,23 @@ fun TestScreen(vm: AppViewModel, ui: UiState) {
 
 // ------------------------------------------------------------------ manual editor
 
+/** Decimal by default ("37"); hex with a 0x prefix ("0x25") or an h suffix ("25h"). */
+internal fun parseNumber(text: String): Long? {
+    val t = text.trim().lowercase()
+    return when {
+        t.startsWith("0x") -> t.drop(2).toLongOrNull(16)
+        t.endsWith("h") -> t.dropLast(1).toLongOrNull(16)
+        else -> t.toLongOrNull()
+    }
+}
+
 @Composable
 fun EditKeyScreen(vm: AppViewModel, ui: UiState, key: G20Key) {
     val saved = ui.config.keys[key]
     val parsed = saved?.signal as? IrSignal.Parsed
     var protocol by remember(key) { mutableStateOf(parsed?.protocol ?: Protocol.NEC) }
-    var address by remember(key) { mutableStateOf(parsed?.address?.toString(16)?.uppercase() ?: "0") }
-    var command by remember(key) { mutableStateOf(parsed?.command?.toString(16)?.uppercase() ?: "0") }
+    var address by remember(key) { mutableStateOf(parsed?.address?.toString() ?: "0") }
+    var command by remember(key) { mutableStateOf(parsed?.command?.toString() ?: "0") }
     var pasted by remember(key) { mutableStateOf("") }
     val trial = ui.trial?.takeIf { it.first == key }?.second
 
@@ -364,10 +374,10 @@ fun EditKeyScreen(vm: AppViewModel, ui: UiState, key: G20Key) {
     val first = rememberInitialFocus()
 
     fun sendProtocol(cmd: Long) {
-        val a = address.trim().toLongOrNull(16)
-        if (a == null || a < 0 || a > protocol.maxAddress) { vm.toast("Address must be hex 0..${protocol.maxAddress.toString(16).uppercase()}"); return }
-        if (cmd < 0 || cmd > protocol.maxCommand) { vm.toast("Command must be hex 0..${protocol.maxCommand.toString(16).uppercase()}"); return }
-        command = cmd.toString(16).uppercase()
+        val a = parseNumber(address)
+        if (a == null || a < 0 || a > protocol.maxAddress) { vm.toast("Address must be 0..${protocol.maxAddress} (0x${protocol.maxAddress.toString(16).uppercase()})"); return }
+        if (cmd < 0 || cmd > protocol.maxCommand) { vm.toast("Command must be 0..${protocol.maxCommand} (0x${protocol.maxCommand.toString(16).uppercase()})"); return }
+        command = cmd.toString()
         vm.trial(key, IrSignal.Parsed(protocol, a, cmd), "Entered by hand")
     }
 
@@ -386,7 +396,7 @@ fun EditKeyScreen(vm: AppViewModel, ui: UiState, key: G20Key) {
             vm.go(Screen.PickCategory(null, key))
         }
 
-        Section("Protocol, address and command (hex)")
+        Section("Protocol, address and command (decimal, or 0x… for hex)")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = {
                 protocol = Protocol.entries[(protocol.ordinal + 1) % Protocol.entries.size]
@@ -398,11 +408,11 @@ fun EditKeyScreen(vm: AppViewModel, ui: UiState, key: G20Key) {
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { command.trim().toLongOrNull(16)?.let { sendProtocol(it) } ?: vm.toast("Command is not hex") }) {
+            Button(onClick = { parseNumber(command)?.let { sendProtocol(it) } ?: vm.toast("Command is not a number") }) {
                 Text("Send to remote")
             }
-            OutlinedButton(onClick = { command.trim().toLongOrNull(16)?.let { sendProtocol(it - 1) } }) { Text("◀ Command −1") }
-            OutlinedButton(onClick = { command.trim().toLongOrNull(16)?.let { sendProtocol(it + 1) } }) { Text("Command +1 ▶") }
+            OutlinedButton(onClick = { parseNumber(command)?.let { sendProtocol(it - 1) } }) { Text("◀ Command −1") }
+            OutlinedButton(onClick = { parseNumber(command)?.let { sendProtocol(it + 1) } }) { Text("Command +1 ▶") }
         }
         Body("Tip: to find a missing code, keep the address of a key that works and step through commands.")
 

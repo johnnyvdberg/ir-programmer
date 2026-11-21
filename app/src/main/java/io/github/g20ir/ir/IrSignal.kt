@@ -47,7 +47,8 @@ sealed interface IrSignal {
     data class G20Hex(val hex: String) : IrSignal
 
     fun describe(): String = when (this) {
-        is Parsed -> "${protocol.id} addr 0x${address.toString(16).uppercase()} cmd 0x${command.toString(16).uppercase()}"
+        is Parsed -> "${protocol.id} address $address (0x${address.toString(16).uppercase()}), " +
+            "command $command (0x${command.toString(16).uppercase()})"
         is Raw -> "raw ${carrierHz / 1000.0} kHz, ${once.size + repeat.size} timings"
         is G20Hex -> "G20 payload, ${hex.length / 2} bytes"
     }
