@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { App(vm) }
+        io.github.g20ir.buttons.ServiceRepair.onAppOpened(this)
         if (Build.VERSION.SDK_INT >= 31 &&
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) {

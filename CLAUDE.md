@@ -92,8 +92,9 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
   Hence SIMPLE is the default.
 - Boot: the accessibility service's process is started very early, dies with SIGABRT before
   attaching ("failed to attach … start timeout"), and Android never rebinds (service stuck in
-  "Binding services", Projectivy's too). `ServiceRepair`/`BootReceiver` re-write
-  ENABLED_ACCESSIBILITY_SERVICES ~15 s after BOOT_COMPLETED if the service isn't running;
+  "Binding services", Projectivy's too). `ServiceRepair` re-writes
+  ENABLED_ACCESSIBILITY_SERVICES when the service is enabled but not bound: job chain after
+  BOOT_COMPLETED/update (15 s, 30 s, 1, 2, 5 min), persisted 15-min periodic job, and on app open;
   needs WRITE_SECURE_SETTINGS, which the adb helper grants itself (`pm grant`).
 - Bluetooth-only keys measured with getevent (event8): red/green/yellow/blue 0x69/6A/6C/6B
   (KEY_RED..BLUE), YouTube 0x77, Netflix 0x78, Prime Video 0x79, rocket 0x7A (all KEY_UNKNOWN

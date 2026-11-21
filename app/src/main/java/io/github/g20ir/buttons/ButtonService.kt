@@ -25,6 +25,7 @@ class ButtonService : AccessibilityService() {
     override fun onServiceConnected() {
         ButtonStore.init(this)
         ButtonStore.serviceRunning.value = true
+        ServiceRepair.ensurePeriodic(this)
         scope.launch {
             ButtonStore.helperEnabled.collect { on -> if (on) startHelper() else stopHelper() }
         }

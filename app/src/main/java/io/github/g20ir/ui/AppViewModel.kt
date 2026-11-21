@@ -713,6 +713,8 @@ class AppViewModel @JvmOverloads constructor(
 
     fun canRepairButtonService(): Boolean = io.github.g20ir.buttons.ServiceRepair.canRepair(getApplication())
 
+    fun lastAutoRepair(): String? = io.github.g20ir.buttons.ServiceRepair.lastRepair(getApplication())
+
     fun openAccessibilitySettings() {
         val app = getApplication<Application>()
         for (action in listOf(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS, android.provider.Settings.ACTION_SETTINGS)) {

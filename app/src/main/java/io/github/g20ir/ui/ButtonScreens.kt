@@ -66,8 +66,10 @@ fun ButtonsContent(
                     OutlinedButton(onClick = { vm.repairButtonService() }) { Text("Restart button service") }
                 }
             }
+            val lastRepair = remember(running) { vm.lastAutoRepair() }
             Body(
-                if (canRepair) "Boot repair: ready. If Android leaves the service stuck after a reboot, the app restarts it."
+                if (canRepair) "Auto repair: ready. If Android leaves the service stuck, the app restarts it (after boot, every 15 minutes, and when you open this app)." +
+                    (lastRepair?.let { "\nLast repair: $it" } ?: "")
                 else "Boot repair: needs a one-time permission. Turn the helper on once (it grants it), or run: adb shell pm grant io.github.g20ir android.permission.WRITE_SECURE_SETTINGS",
             )
 
