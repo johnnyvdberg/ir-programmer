@@ -93,9 +93,15 @@ data class UiState(
 )
 
 @SuppressLint("MissingPermission")
-class AppViewModel(app: Application) : AndroidViewModel(app) {
+class AppViewModel @JvmOverloads constructor(
+    app: Application,
+    /** Supplies the code database JSON; screenshot tests pass their own. */
+    dbJson: (() -> String)? = null,
+) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("g20", Context.MODE_PRIVATE)
-    val db: CodeDatabase by lazy { CodeDatabase(app.assets.open("irdb.json").bufferedReader().readText()) }
+    val db: CodeDatabase by lazy {
+        CodeDatabase(dbJson?.invoke() ?: app.assets.open("irdb.json").bufferedReader().readText())
+    }
 
     private val _ui = MutableStateFlow(
         UiState(
@@ -498,6 +504,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         go(Screen.EditKey(key))
         trial(key, signal, "${set.brand} (${set.models.first()})")
     }
+
+    /** For screenshot tests: set the UI state directly. */
+    @androidx.annotation.VisibleForTesting
+    fun setStateForPreview(f: (UiState) -> UiState) = _ui.update(f)
 
     override fun onCleared() {
         remote?.close()
