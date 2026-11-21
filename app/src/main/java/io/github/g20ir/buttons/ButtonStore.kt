@@ -31,6 +31,16 @@ object ButtonStore {
     private val _actions = MutableStateFlow<Map<RemoteButton, ButtonAction>>(emptyMap())
     val actions: StateFlow<Map<RemoteButton, ButtonAction>> = _actions
 
+    /** Optional action when a button is held (~0.6 s). None = no hold behaviour, no delay. */
+    private val _holdActions = MutableStateFlow<Map<RemoteButton, ButtonAction>>(emptyMap())
+    val holdActions: StateFlow<Map<RemoteButton, ButtonAction>> = _holdActions
+
+    /**
+     * Sends an Android key code through the adb helper; set by the service while the helper
+     * runs. Apps can't inject keys themselves, adb shell (`input keyevent`) can.
+     */
+    @Volatile var keySender: ((Int) -> Unit)? = null
+
     /** What the four app buttons do when the helper isn't running (they look identical then). */
     private val _sharedAppAction = MutableStateFlow<ButtonAction>(ButtonAction.None)
     val sharedAppAction: StateFlow<ButtonAction> = _sharedAppAction
@@ -53,12 +63,26 @@ object ButtonStore {
             ButtonAction.decode(p.getString(b.name, null)) ?: defaultFor(b, pm)
         }
         _actions.value = map
+        _holdActions.value = RemoteButton.entries.associateWith { b ->
+            ButtonAction.decode(p.getString("${b.name}_hold", null)) ?: ButtonAction.None
+        }
         _sharedAppAction.value = ButtonAction.decode(p.getString("shared_app_keys", null)) ?: ButtonAction.None
         _helperEnabled.value = p.getBoolean("helper", false)
     }
 
     private fun defaultFor(b: RemoteButton, pm: PackageManager): ButtonAction {
-        if (b == RemoteButton.SETTINGS) return ButtonAction.SystemSettings
+        // The Shield's Android 11 key layout has no entries for these Linux keys, so apps (e.g.
+        // TiviMate) get KEYCODE_UNKNOWN. Send the real key code instead.
+        when (b) {
+            RemoteButton.SETTINGS -> return ButtonAction.SystemSettings
+            RemoteButton.RED -> return ButtonAction.SendKey(183, "PROG_RED")
+            RemoteButton.GREEN -> return ButtonAction.SendKey(184, "PROG_GREEN")
+            RemoteButton.YELLOW -> return ButtonAction.SendKey(185, "PROG_YELLOW")
+            RemoteButton.BLUE -> return ButtonAction.SendKey(186, "PROG_BLUE")
+            RemoteButton.INFO -> return ButtonAction.SendKey(165, "INFO")
+            RemoteButton.SUBTITLES -> return ButtonAction.SendKey(175, "CAPTIONS")
+            else -> {}
+        }
         val pkg = DEFAULT_APPS[b]?.firstOrNull { isInstalled(pm, it) } ?: return ButtonAction.None
         return ButtonAction.App(pkg, b.label)
     }
@@ -69,6 +93,20 @@ object ButtonStore {
     fun setAction(b: RemoteButton, a: ButtonAction) {
         prefs?.edit()?.putString(b.name, a.encode())?.apply()
         _actions.update { it + (b to a) }
+    }
+
+    fun setHoldAction(b: RemoteButton, a: ButtonAction) {
+        prefs?.edit()?.putString("${b.name}_hold", a.encode())?.apply()
+        _holdActions.update { it + (b to a) }
+    }
+
+    fun holdAction(b: RemoteButton): ButtonAction = _holdActions.value[b] ?: ButtonAction.None
+
+    /** False for actions that can't run right now (Send key without the helper). */
+    fun canPerform(a: ButtonAction): Boolean = when (a) {
+        ButtonAction.None -> false
+        is ButtonAction.SendKey -> keySender != null && helperStatus.value == HelperStatus.Running
+        else -> true
     }
 
     fun setSharedAppAction(a: ButtonAction) {
@@ -91,6 +129,7 @@ object ButtonStore {
         ButtonAction.Recents -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)
         ButtonAction.Notifications -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
         ButtonAction.SystemSettings -> start(service, Intent(Settings.ACTION_SETTINGS))
+        is ButtonAction.SendKey -> keySender?.let { it(a.code); true } ?: false
         is ButtonAction.App -> {
             val pm = service.packageManager
             val i = pm.getLeanbackLaunchIntentForPackage(a.pkg) ?: pm.getLaunchIntentForPackage(a.pkg)

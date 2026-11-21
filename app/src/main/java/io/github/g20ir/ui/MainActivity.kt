@@ -85,7 +85,7 @@ fun App(vm: AppViewModel) {
                         Screen.CheckRemote -> CheckRemoteScreen(vm, ui)
                         Screen.Transfer -> TransferScreen(vm, ui)
                         Screen.Buttons -> ButtonsScreen(vm)
-                        is Screen.PickAction -> PickActionScreen(vm, s.button)
+                        is Screen.PickAction -> PickActionScreen(vm, s.button, s.hold)
                     }
                 }
                 StatusOverlay(ui, vm)

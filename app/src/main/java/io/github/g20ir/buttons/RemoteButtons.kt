@@ -47,6 +47,9 @@ sealed interface ButtonAction {
     data object SystemSettings : ButtonAction
     data class App(val pkg: String, val label: String) : ButtonAction
 
+    /** Sends an Android key code (via the adb helper, like `input keyevent`). */
+    data class SendKey(val code: Int, val name: String) : ButtonAction
+
     fun describe(): String = when (this) {
         None -> "Nothing (default behaviour)"
         Home -> "Home"
@@ -55,6 +58,7 @@ sealed interface ButtonAction {
         Notifications -> "Notifications"
         SystemSettings -> "Android TV settings"
         is App -> "Open $label"
+        is SendKey -> "Send key $name"
     }
 
     fun encode(): String = when (this) {
@@ -65,6 +69,7 @@ sealed interface ButtonAction {
         Notifications -> "notifications"
         SystemSettings -> "settings"
         is App -> "app:$pkg|$label"
+        is SendKey -> "key:$code|$name"
     }
 
     companion object {
@@ -76,6 +81,9 @@ sealed interface ButtonAction {
             s == "recents" -> Recents
             s == "notifications" -> Notifications
             s == "settings" -> SystemSettings
+            s.startsWith("key:") -> s.removePrefix("key:").split("|", limit = 2).let { parts ->
+                parts[0].toIntOrNull()?.let { SendKey(it, parts.getOrElse(1) { "key ${parts[0]}" }) }
+            }
             s.startsWith("app:") -> s.removePrefix("app:").split("|", limit = 2)
                 .let { parts -> App(parts[0], parts.getOrElse(1) { parts[0] }) }
             else -> null
@@ -85,6 +93,48 @@ sealed interface ButtonAction {
     }
 }
 
+/** Android key codes offered by "Send key", grouped for the picker. */
+object KeyCatalog {
+    data class Key(val code: Int, val name: String, val group: String, val minSdk: Int = 1) {
+        val action get() = ButtonAction.SendKey(code, name)
+    }
+
+    private const val TV = "TV and colour keys"
+    private const val MEDIA = "Media"
+    private const val NAV = "Navigation and system"
+    private const val NUM = "Numbers"
+    private const val GTV = "Google TV keys"
+
+    val keys: List<Key> = listOf(
+        Key(183, "PROG_RED", TV), Key(184, "PROG_GREEN", TV), Key(185, "PROG_YELLOW", TV), Key(186, "PROG_BLUE", TV),
+        Key(165, "INFO", TV), Key(172, "GUIDE", TV), Key(175, "CAPTIONS", TV), Key(174, "BOOKMARK", TV),
+        Key(173, "DVR", TV), Key(166, "CHANNEL_UP", TV), Key(167, "CHANNEL_DOWN", TV),
+        Key(229, "LAST_CHANNEL", TV), Key(170, "TV", TV), Key(178, "TV_INPUT", TV), Key(233, "TV_TELETEXT", TV),
+        Key(222, "MEDIA_AUDIO_TRACK", TV), Key(255, "TV_ZOOM_MODE", TV), Key(230, "TV_DATA_SERVICE", TV),
+        Key(85, "MEDIA_PLAY_PAUSE", MEDIA), Key(126, "MEDIA_PLAY", MEDIA), Key(127, "MEDIA_PAUSE", MEDIA),
+        Key(86, "MEDIA_STOP", MEDIA), Key(87, "MEDIA_NEXT", MEDIA), Key(88, "MEDIA_PREVIOUS", MEDIA),
+        Key(89, "MEDIA_REWIND", MEDIA), Key(90, "MEDIA_FAST_FORWARD", MEDIA), Key(130, "MEDIA_RECORD", MEDIA),
+        Key(226, "MEDIA_TOP_MENU", MEDIA),
+        Key(19, "DPAD_UP", NAV), Key(20, "DPAD_DOWN", NAV), Key(21, "DPAD_LEFT", NAV), Key(22, "DPAD_RIGHT", NAV),
+        Key(23, "DPAD_CENTER", NAV), Key(4, "BACK", NAV), Key(3, "HOME", NAV), Key(82, "MENU", NAV),
+        Key(84, "SEARCH", NAV), Key(176, "SETTINGS", NAV), Key(83, "NOTIFICATION", NAV),
+        Key(219, "ASSIST", NAV), Key(231, "VOICE_ASSIST", NAV), Key(171, "WINDOW", NAV), Key(26, "POWER", NAV),
+        Key(223, "SLEEP", NAV), Key(224, "WAKEUP", NAV),
+        Key(284, "ALL_APPS", GTV), Key(288, "PROFILE_SWITCH", GTV), Key(285, "REFRESH", GTV),
+        Key(286, "THUMBS_UP", GTV), Key(287, "THUMBS_DOWN", GTV),
+    ) + (0..9).map { Key(7 + it, "$it", NUM) } + // KEYCODE_0..KEYCODE_9
+        (1..8).map { Key(288 + it, "VIDEO_APP_$it", GTV, 33) } +
+        (1..4).map { Key(296 + it, "FEATURED_APP_$it", GTV, 33) } +
+        (1..4).map { Key(300 + it, "DEMO_APP_$it", GTV, 33) }
+
+    val groups: List<String> = listOf(TV, MEDIA, NAV, NUM, GTV)
+
+    fun byCode(code: Int) = keys.firstOrNull { it.code == code }
+}
+
+/** A press or release of an app button, as read by [GeteventParser]. */
+data class KeyPress(val button: RemoteButton, val down: Boolean)
+
 /**
  * Parses `getevent -l` output and reports app-button presses. getevent prints the usage
  * (EV_MSC MSC_SCAN 000c0079) right before the key event (EV_KEY KEY_UNKNOWN DOWN).
@@ -92,8 +142,8 @@ sealed interface ButtonAction {
 class GeteventParser {
     private val lastScan = HashMap<String, Int>()
 
-    /** Returns the button whose DOWN event this line completes, or null. */
-    fun feed(line: String): RemoteButton? {
+    /** Returns the app-button press or release this line completes, or null. */
+    fun feed(line: String): KeyPress? {
         val parts = line.trim().split(Regex("\\s+"))
         if (parts.size < 3) return null
         val hasDevice = parts[0].endsWith(":")
@@ -102,10 +152,10 @@ class GeteventParser {
         if (p.size < 3) return null
         when {
             p[0] == "EV_MSC" && p[1] == "MSC_SCAN" -> p[2].toIntOrNull(16)?.let { lastScan[dev] = it }
-            p[0] == "EV_KEY" && p[2] == "DOWN" -> {
+            p[0] == "EV_KEY" && (p[2] == "DOWN" || p[2] == "UP") -> {
                 val usage = (lastScan.remove(dev) ?: return null) and 0xFFFF
                 val b = RemoteButton.fromUsage(usage) ?: return null
-                return if (b.isAppKey) b else null
+                return if (b.isAppKey) KeyPress(b, p[2] == "DOWN") else null
             }
             p[0] == "EV_KEY" -> lastScan.remove(dev)
         }

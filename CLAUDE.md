@@ -24,6 +24,12 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
     code to actions; `AdbKeyHelper` connects to the Shield's own adbd (127.0.0.1:5555, dadb,
     key in filesDir) and runs `getevent -l` on a pty (getevent never flushes) to tell the four
     app buttons apart by HID usage; `ButtonStore` = prefs + shared state.
+    Actions: open app, Home/Back/Recents/Notifications/Settings, or "Send key" (any Android
+    key code via `input keyevent` on a persistent adb shell; `KeyCatalog`). Optional
+    "when held" action per button (600 ms; short press then fires on release).
+    Android 11 Generic.kl has no entries for KEY_RED..BLUE (398-401), KEY_INFO (358),
+    KEY_SUBTITLE (370), KEY_TAPE (384) → apps get KEYCODE_UNKNOWN; defaults therefore send
+    PROG_RED..BLUE / INFO / CAPTIONS (needs the helper). GUIDE (362) and BOOKMARK (156) map.
 - `tools/build_irdb.py`: Flipper-IRDB (CC0) → `app/src/main/assets/irdb.json`
 - `tools/legacy/`: original Python converter + Sony generator + captured payloads
 - Tests: `./gradlew :app:testDebugUnitTest` (encoders vs Sony frame and Google-captured LG

@@ -67,7 +67,7 @@ sealed interface Screen {
     data object Transfer : Screen
     data object Buttons : Screen
     /** button == null: the shared action of the app buttons when the helper isn't running. */
-    data class PickAction(val button: io.github.g20ir.buttons.RemoteButton?) : Screen
+    data class PickAction(val button: io.github.g20ir.buttons.RemoteButton?, val hold: Boolean = false) : Screen
 }
 
 data class CheckState(
@@ -689,9 +689,12 @@ class AppViewModel @JvmOverloads constructor(
         return out.values.sortedBy { it.label.lowercase() }
     }
 
-    fun pickAction(b: io.github.g20ir.buttons.RemoteButton?, a: io.github.g20ir.buttons.ButtonAction) {
-        if (b == null) io.github.g20ir.buttons.ButtonStore.setSharedAppAction(a)
-        else io.github.g20ir.buttons.ButtonStore.setAction(b, a)
+    fun pickAction(b: io.github.g20ir.buttons.RemoteButton?, hold: Boolean, a: io.github.g20ir.buttons.ButtonAction) {
+        when {
+            b == null -> io.github.g20ir.buttons.ButtonStore.setSharedAppAction(a)
+            hold -> io.github.g20ir.buttons.ButtonStore.setHoldAction(b, a)
+            else -> io.github.g20ir.buttons.ButtonStore.setAction(b, a)
+        }
         go(Screen.Buttons)
     }
 

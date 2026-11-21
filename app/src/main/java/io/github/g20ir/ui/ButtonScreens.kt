@@ -23,23 +23,26 @@ import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import io.github.g20ir.buttons.ButtonAction
 import io.github.g20ir.buttons.ButtonStore
+import io.github.g20ir.buttons.KeyCatalog
 import io.github.g20ir.buttons.RemoteButton
 
 @Composable
 fun ButtonsScreen(vm: AppViewModel) {
     val actions by ButtonStore.actions.collectAsStateWithLifecycle()
+    val holds by ButtonStore.holdActions.collectAsStateWithLifecycle()
     val shared by ButtonStore.sharedAppAction.collectAsStateWithLifecycle()
     val running by ButtonStore.serviceRunning.collectAsStateWithLifecycle()
     val helperOn by ButtonStore.helperEnabled.collectAsStateWithLifecycle()
     val helper by ButtonStore.helperStatus.collectAsStateWithLifecycle()
     val last by ButtonStore.lastPress.collectAsStateWithLifecycle()
-    ButtonsContent(vm, actions, shared, running, helperOn, helper, last)
+    ButtonsContent(vm, actions, holds, shared, running, helperOn, helper, last)
 }
 
 @Composable
 fun ButtonsContent(
     vm: AppViewModel,
     actions: Map<RemoteButton, ButtonAction>,
+    holds: Map<RemoteButton, ButtonAction>,
     shared: ButtonAction,
     running: Boolean,
     helperOn: Boolean,
@@ -61,7 +64,7 @@ fun ButtonsContent(
             }
 
             Section("2. Helper for the app buttons (optional)")
-            Body("YouTube, Netflix, Prime Video and rocket all reach Android as the same unknown key. The helper tells them apart by reading the remote through this Shield's own adb (Network debugging).")
+            Body("Needed for \"Send key\" (e.g. the colour keys for TiviMate) and to tell YouTube, Netflix, Prime Video and rocket apart. It uses this Shield's own adb (Network debugging).")
             Spacer(Modifier.height(4.dp))
             val (statusText, color) = when {
                 !helperOn -> "Off: the four app buttons share one action" to MaterialTheme.colorScheme.onBackground
@@ -88,11 +91,21 @@ fun ButtonsContent(
         }
         LazyColumn(Modifier.weight(1f)) {
             item { Section("Buttons") }
+            val helperUp = helperOn && helper is ButtonStore.HelperStatus.Running
+            fun note(b: RemoteButton, a: ButtonAction) =
+                if (!helperUp && (b.isAppKey || a is ButtonAction.SendKey) && a != ButtonAction.None) " (needs the helper)" else ""
             items(RemoteButton.entries.size) { i ->
                 val b = RemoteButton.entries[i]
                 val a = actions[b] ?: ButtonAction.None
-                val note = if (b.isAppKey && !(helperOn && helper is ButtonStore.HelperStatus.Running)) " (needs the helper)" else ""
-                Item(b.label, a.describe() + note, if (i == 0) first else null) { vm.go(Screen.PickAction(b)) }
+                val h = holds[b] ?: ButtonAction.None
+                val sub = a.describe() + note(b, a) + if (h != ButtonAction.None) "\nHeld: ${h.describe()}" + note(b, h) else ""
+                Item(b.label, sub, if (i == 0) first else null) { vm.go(Screen.PickAction(b)) }
+            }
+            item { Section("When held (optional)") }
+            item { Body("A hold action makes that button act on release for short presses.") }
+            items(RemoteButton.entries.size) { i ->
+                val b = RemoteButton.entries[i]
+                Item("${b.label} (held)", (holds[b] ?: ButtonAction.None).describe()) { vm.go(Screen.PickAction(b, hold = true)) }
             }
             item {
                 Item("App buttons without the helper", "All four: " + shared.describe()) { vm.go(Screen.PickAction(null)) }
@@ -102,13 +115,22 @@ fun ButtonsContent(
 }
 
 @Composable
-fun PickActionScreen(vm: AppViewModel, button: RemoteButton?) {
+fun PickActionScreen(vm: AppViewModel, button: RemoteButton?, hold: Boolean) {
     val apps = remember { vm.launchableApps() }
     val actions by ButtonStore.actions.collectAsStateWithLifecycle()
+    val holds by ButtonStore.holdActions.collectAsStateWithLifecycle()
     val shared by ButtonStore.sharedAppAction.collectAsStateWithLifecycle()
-    val current = if (button == null) shared else actions[button] ?: ButtonAction.None
+    val current = when {
+        button == null -> shared
+        hold -> holds[button] ?: ButtonAction.None
+        else -> actions[button] ?: ButtonAction.None
+    }
     Title(
-        if (button == null) "App buttons without the helper" else button.label,
+        when {
+            button == null -> "App buttons without the helper"
+            hold -> "${button.label}: when held"
+            else -> button.label
+        },
         "Now: ${current.describe()}",
     )
     val first = rememberInitialFocus()
@@ -116,9 +138,21 @@ fun PickActionScreen(vm: AppViewModel, button: RemoteButton?) {
         item { Section("Actions") }
         items(ButtonAction.fixed.size) { i ->
             val a = ButtonAction.fixed[i]
-            Item(a.describe(), null, if (i == 0) first else null) { vm.pickAction(button, a) }
+            Item(a.describe(), null, if (i == 0) first else null) { vm.pickAction(button, hold, a) }
+        }
+        if (button != null) {
+            item { Body("\"Send key\" acts as if the remote had that key. It needs the helper.") }
+            for (g in KeyCatalog.groups) {
+                item { Section("Send key: $g") }
+                val keys = KeyCatalog.keys.filter { it.group == g }
+                items(keys) { k ->
+                    val sub = "KEYCODE_${k.name}" +
+                        if (k.minSdk > android.os.Build.VERSION.SDK_INT) " (Android ${if (k.minSdk >= 33) "13" else "?"}+, this TV may ignore it)" else ""
+                    Item(k.name, sub) { vm.pickAction(button, hold, k.action) }
+                }
+            }
         }
         item { Section("Open an app") }
-        items(apps) { a -> Item(a.label, a.pkg) { vm.pickAction(button, a) } }
+        items(apps) { a -> Item(a.label, a.pkg) { vm.pickAction(button, hold, a) } }
     }
 }
