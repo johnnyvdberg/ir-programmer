@@ -58,7 +58,18 @@ RC6, SIRC 12/15/20, RCA, Pioneer, Kaseikyo, and raw.
     adb connect <shield-ip>:5555        # Settings → Device preferences → Developer options → Network debugging
     adb install -r app/build/outputs/apk/release/app-release.apk
 
-The release APK is signed with the debug key so it can be sideloaded directly.
+Ready-made APKs are on the [Releases](../../releases) page; pushing a `v*` tag builds and
+publishes one (`.github/workflows/release.yml`).
+
+Signing: Android only installs an update signed with the same key as the installed app, so
+releases should use one fixed key kept in GitHub secrets (never in the repo):
+
+    keytool -genkeypair -keystore g20ir.jks -alias g20ir -keyalg RSA -keysize 2048 -validity 10000
+    base64 -w0 g20ir.jks    # -> secret KEYSTORE_BASE64
+
+and add the secrets `KEYSTORE_PASSWORD`, `KEY_ALIAS` (g20ir) and `KEY_PASSWORD` under
+Settings → Secrets and variables → Actions. Without them the workflow signs with a throwaway
+debug key, which works for a first install but can't update a previous build.
 
 `tools/legacy/` holds the original Python scripts (Pronto ↔ G20 converter and the Sony SIRC
 generator).

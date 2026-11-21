@@ -17,11 +17,24 @@ android {
         versionName = "1.0"
     }
 
+    // Release signing comes from the environment (GitHub Actions secrets), never from the repo:
+    //   G20_KEYSTORE (path), G20_KEYSTORE_PASSWORD, G20_KEY_ALIAS, G20_KEY_PASSWORD
+    // Without them the release APK falls back to the local debug key.
+    val keystore = System.getenv("G20_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = keystore
+                storePassword = System.getenv("G20_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("G20_KEY_ALIAS")
+                keyPassword = System.getenv("G20_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the APK can be sideloaded as-is.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {
