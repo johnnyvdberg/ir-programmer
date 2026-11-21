@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Android 11 and older (the Shield) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -9,6 +10,12 @@
 
     <!-- Export/import page served on the local network while that screen is open -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Repairing the button service after boot (see ServiceRepair) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Granted with adb (pm grant), never at install; used to re-apply the accessibility setting -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- List launchable apps for the button actions -->
     <queries>
@@ -55,5 +62,13 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/button_service" />
         </service>
+        <receiver
+            android:name=".buttons.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

@@ -85,9 +85,16 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
   under both 0x00B2 and 0x0139 (the non-matching ID is ignored by `ir_table_add_key` without
   using a slot), and the Check screen logs every IR report and raw Android key code.
 - Power never reaches apps as a Bluetooth key (system-intercepted).
+- Negotiated MTU is 131 (logcat) → max 128 bytes per code.
 - Type 3 codes fail on this firmware: SIRC 1/18 as type 3 (1 frame + 1 repeat, 112 B) did
-  nothing, the same frame as type 2 (60 B) works. (One SIRC15 type 3 code did work, so type 3
-  handling is inconsistent rather than absent.) Hence SIMPLE is the default.
+  nothing, the same frame as type 2 (60 B) works. The SIRC15 26/90 code that "worked" was in
+  fact built as type 2 (type 3 needed 136 B > 128), so type 3 has never worked here.
+  Hence SIMPLE is the default.
+- Boot: the accessibility service's process is started very early, dies with SIGABRT before
+  attaching ("failed to attach … start timeout"), and Android never rebinds (service stuck in
+  "Binding services", Projectivy's too). `ServiceRepair`/`BootReceiver` re-write
+  ENABLED_ACCESSIBILITY_SERVICES ~15 s after BOOT_COMPLETED if the service isn't running;
+  needs WRITE_SECURE_SETTINGS, which the adb helper grants itself (`pm grant`).
 - Bluetooth-only keys measured with getevent (event8): red/green/yellow/blue 0x69/6A/6C/6B
   (KEY_RED..BLUE), YouTube 0x77, Netflix 0x78, Prime Video 0x79, rocket 0x7A (all KEY_UNKNOWN
   = scan 240, indistinguishable to apps), gear 0x96 (KEY_TAPE 384), info 0x1BD, guide 0x8D

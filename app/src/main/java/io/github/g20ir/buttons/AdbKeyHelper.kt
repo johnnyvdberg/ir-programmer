@@ -22,6 +22,8 @@ import kotlin.concurrent.thread
  */
 class AdbKeyHelper(
     private val filesDir: File,
+    /** Package to grant WRITE_SECURE_SETTINGS to (for [ServiceRepair]), or null. */
+    private val grantTo: String?,
     private val onPress: (KeyPress) -> Unit,
     private val log: (String) -> Unit,
 ) {
@@ -80,6 +82,14 @@ class AdbKeyHelper(
                     current = d
                     val parser = GeteventParser()
                     log("adb helper connected (pty: $usePty)")
+                    grantTo?.let { pkg ->
+                        try {
+                            d.shell("pm grant $pkg android.permission.WRITE_SECURE_SETTINGS")
+                            log("granted WRITE_SECURE_SETTINGS for the boot repair")
+                        } catch (e: Exception) {
+                            log("could not grant WRITE_SECURE_SETTINGS: ${e.message}")
+                        }
+                    }
                     ButtonStore.helperStatus.value = ButtonStore.HelperStatus.Running
                     backoff = 3_000L
                     if (usePty) {
@@ -112,7 +122,7 @@ class AdbKeyHelper(
                         }
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 if (!running) break
                 val msg = when (e) {
                     is java.net.ConnectException -> "Can't reach adb on this Shield. Is Network debugging on?"

@@ -34,6 +34,7 @@ class ButtonService : AccessibilityService() {
         if (helper != null) return
         val h = AdbKeyHelper(
             filesDir,
+            grantTo = if (ServiceRepair.canRepair(this)) null else packageName,
             onPress = { p -> main.post { handle(p.button, p.down, 0) } },
             log = { android.util.Log.i("G20IR", it) },
         )

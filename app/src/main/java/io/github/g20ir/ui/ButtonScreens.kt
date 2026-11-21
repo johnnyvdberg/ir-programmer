@@ -55,13 +55,21 @@ fun ButtonsContent(
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Section("1. Button service")
+            val canRepair = remember(running) { vm.canRepairButtonService() }
             if (running) {
                 Body("On. It starts by itself after every reboot.")
             } else {
-                Body("Off. Turn on \"G20 remote buttons\" under Settings → Device Preferences → Accessibility.", warn)
+                Body("Not running. Turn on \"G20 remote buttons\" under Settings → Device Preferences → Accessibility. If it is already on, Android left it stuck after boot: use Restart.", warn)
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = { vm.openAccessibilitySettings() }) { Text("Open accessibility settings") }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { vm.openAccessibilitySettings() }) { Text("Open accessibility settings") }
+                    OutlinedButton(onClick = { vm.repairButtonService() }) { Text("Restart button service") }
+                }
             }
+            Body(
+                if (canRepair) "Boot repair: ready. If Android leaves the service stuck after a reboot, the app restarts it."
+                else "Boot repair: needs a one-time permission. Turn the helper on once (it grants it), or run: adb shell pm grant io.github.g20ir android.permission.WRITE_SECURE_SETTINGS",
+            )
 
             Section("2. Helper for the app buttons (optional)")
             Body("Needed for \"Send key\" (e.g. the colour keys for TiviMate) and to tell YouTube, Netflix, Prime Video and rocket apart. It uses this Shield's own adb (Network debugging).")

@@ -698,6 +698,21 @@ class AppViewModel @JvmOverloads constructor(
         go(Screen.Buttons)
     }
 
+    /** Same repair as after boot: re-apply the accessibility setting so Android binds again. */
+    fun repairButtonService() {
+        val app = getApplication<Application>()
+        if (!io.github.g20ir.buttons.ServiceRepair.canRepair(app)) {
+            toast("Needs permission: turn the helper on once, or run adb shell pm grant io.github.g20ir android.permission.WRITE_SECURE_SETTINGS")
+            return
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val ok = io.github.g20ir.buttons.ServiceRepair.rebind(app)
+            toast(if (ok) "Button service restarted." else "Could not restart the button service.")
+        }
+    }
+
+    fun canRepairButtonService(): Boolean = io.github.g20ir.buttons.ServiceRepair.canRepair(getApplication())
+
     fun openAccessibilitySettings() {
         val app = getApplication<Application>()
         for (action in listOf(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS, android.provider.Settings.ACTION_SETTINGS)) {
