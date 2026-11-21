@@ -82,6 +82,11 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
   "Denon AVR (Google TV codes)": addr 2, power 193, vol+ 241, vol- 242, mute 240; 136 B, so
   on the owner's remote (128 B max) it needs long codes. Modern Denon AVRs (RC-1253, AVR-X)
   in Flipper-IRDB are Kaseikyo vendor 0x3254 (208 B).
+- Owner's AVR-X3300W: long writes WORK (Denon 2/193 stored and sent). 193 only switches it off;
+  Denon 2/225 switches it on. Built-in set "Denon AVR-X" (CodeDatabase.denonAvrX): Kaseikyo
+  0x325441, power toggle 5, vol 0x170/0x171, mute 0x172, and every input as a named
+  alternative for the Input key (DENON_INPUTS). CodeSet.names labels signals in the picker.
+  Role RECEIVER = all five keys to the receiver.
 
 ## Owner's remote (from Check remote)
 - Firmware `sdk044_google_ssu`, hardware `wd2308`, software `V01.06`: not the exact

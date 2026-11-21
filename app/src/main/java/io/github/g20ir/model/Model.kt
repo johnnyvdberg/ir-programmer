@@ -52,6 +52,8 @@ data class CodeSet(
     val models: List<String>,
     /** Per key: preferred signal first, then alternatives found in the same model files. */
     val keys: Map<G20Key, List<IrSignal>>,
+    /** Optional names for signals, e.g. which input an Input code selects. */
+    val names: Map<IrSignal, String> = emptyMap(),
 ) {
     fun label(index: Int, total: Int): String {
         val m = models.take(3).joinToString(", ") + if (models.size > 3) " +${models.size - 3}" else ""

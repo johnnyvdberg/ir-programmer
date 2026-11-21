@@ -51,6 +51,12 @@ enum class Role(val title: String, val subtitle: String, val keys: List<G20Key>,
         listOf(G20Key.VOL_UP, G20Key.VOL_DOWN, G20Key.MUTE),
         listOf("Soundbar", "AV receiver", "Speaker", "TV"),
     ),
+    RECEIVER(
+        "Receiver: all five keys",
+        "Power, input, volume and mute go to an AV receiver or soundbar (the TV follows over HDMI-CEC)",
+        listOf(G20Key.POWER, G20Key.INPUT, G20Key.VOL_UP, G20Key.VOL_DOWN, G20Key.MUTE),
+        listOf("AV receiver", "Soundbar"),
+    ),
 }
 
 sealed interface Screen {
@@ -628,7 +634,7 @@ class AppViewModel @JvmOverloads constructor(
 
     fun useCode(key: G20Key, set: CodeSet, signal: IrSignal) {
         go(Screen.EditKey(key))
-        trial(key, signal, "${set.brand} (${set.models.first()})")
+        trial(key, signal, "${set.brand} (${set.models.first()})" + (set.names[signal]?.let { ": $it" } ?: ""))
     }
 
     /** For screenshot tests: set the UI state directly. */

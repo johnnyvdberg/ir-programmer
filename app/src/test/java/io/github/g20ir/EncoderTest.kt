@@ -98,6 +98,21 @@ class EncoderTest {
     }
 
     @Test
+    fun denonAvrXSetFitsWithLongCodes() {
+        val set = io.github.g20ir.db.CodeDatabase.denonAvrX()
+        assertEquals(15, set.keys.getValue(io.github.g20ir.model.G20Key.INPUT).size)
+        for ((_, sigs) in set.keys) for (sig in sigs) {
+            val b = G20Payload.build(sig, G20Payload.ABSOLUTE_MAX_BYTES)
+            assertTrue("${set.names[sig]}: ${b.bytes.size} B", b.bytes.size <= G20Payload.ABSOLUTE_MAX_BYTES)
+            assertTrue("${set.names[sig]} has a name", set.names[sig] != null)
+            if (sig is IrSignal.Parsed && sig.protocol == Protocol.Kaseikyo) {
+                assertEquals(2, b.bytes[0].toInt()) // type 2: the only type the owner's remote takes
+                println("${set.names[sig]}: ${b.bytes.size} B")
+            }
+        }
+    }
+
+    @Test
     fun capturedPayloadsAreAcceptedAsIs() {
         for (h in listOf(capturedLg, capturedDenon)) {
             val s = TextFormats.parse(h)

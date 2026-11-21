@@ -247,7 +247,7 @@ fun PickCodeScreen(vm: AppViewModel, s: Screen.PickCode) {
                 val fits = vm.tryBuild(sig)
                 item {
                     Item(
-                        "Code ${si + 1}: ${sig.describe()}",
+                        "Code ${si + 1}: " + (set.names[sig]?.let { "$it  ·  " } ?: "") + sig.describe(),
                         set.models.take(4).joinToString(", ") + (fits.exceptionOrNull()?.let { "\nNot usable: ${it.message}" } ?: ""),
                         if (idx == 0) first else null,
                         enabled = fits.isSuccess,
