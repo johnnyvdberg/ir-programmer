@@ -39,6 +39,10 @@ object Encoders {
     private val PIONEER_T = Pdwm(8500, 4225, 500, 1500, 500, 500)
 
     private const val NEC_PERIOD = 110_000
+    private const val DENON_MARK = 316
+    private const val DENON_ZERO = 684
+    private const val DENON_ONE = 1684
+    private const val DENON_GAP = 40_105
     private const val SIRC_PERIOD = 45_000
     private const val RC5_HALF = 888
     private const val RC6_HALF = 444
@@ -96,6 +100,24 @@ object Encoders {
             Protocol.RCA -> {
                 val bits = (a and 0xF) or ((c and 0xFF) shl 4) or ((a.inv() and 0xF) shl 12) or ((c.inv() and 0xFF) shl 16)
                 Waveform(38000, frame = pdwm(RCA_T, bits, 24) + 8_000)
+            }
+            Protocol.Denon -> {
+                // Timings match the codes Google's own setup writes for Denon receivers
+                // (12/26/64 cycles at 38 kHz, ~40 ms after each frame): 5 address bits, 8 command
+                // bits, 2 extension bits, LSB first; the second frame has the command and
+                // extension inverted. A receiver acts only on the pair.
+                fun frame(cmd: Long, ext: Long): List<Int> {
+                    val bits = (a and 0x1F) or ((cmd and 0xFF) shl 5) or ((ext and 3) shl 13)
+                    val out = ArrayList<Int>(32)
+                    for (i in 0 until 15) {
+                        out += DENON_MARK
+                        out += if ((bits shr i) and 1L == 1L) DENON_ONE else DENON_ZERO
+                    }
+                    out += DENON_MARK
+                    out += DENON_GAP
+                    return out
+                }
+                Waveform(38000, frame = frame(c, 0) + frame(c.inv() and 0xFF, 3))
             }
             Protocol.Pioneer -> {
                 // 32 data bits plus a 33rd zero bit; Flipper ends the frame on that bit's space,

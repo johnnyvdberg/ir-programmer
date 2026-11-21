@@ -23,8 +23,30 @@ class CodeDatabase(json: String) {
     }
 
     fun codeSets(category: String, brand: String): List<CodeSet> {
-        val arr = db.optJSONObject(category)?.optJSONArray(brand) ?: return emptyList()
-        return List(arr.length()) { CodeSet.fromJson(brand, category, arr.getJSONObject(it)) }
+        val arr = db.optJSONObject(category)?.optJSONArray(brand)
+        val fromDb = if (arr == null) emptyList() else List(arr.length()) { CodeSet.fromJson(brand, category, arr.getJSONObject(it)) }
+        return builtIn(category, brand) + fromDb
+    }
+
+    /**
+     * Code sets not in Flipper-IRDB. Denon: the codes Google TV's own "Set up remote buttons"
+     * writes for Denon receivers (captured from a G20, see tools/legacy/dec.py): Denon protocol,
+     * address 2 (amplifier). Each is 136 bytes, so remotes with a small MTU need long writes.
+     */
+    private fun builtIn(category: String, brand: String): List<CodeSet> {
+        if (category != "AV receiver" || !brand.equals("Denon", ignoreCase = true)) return emptyList()
+        fun d(cmd: Long) = listOf<io.github.g20ir.ir.IrSignal>(io.github.g20ir.ir.IrSignal.Parsed(io.github.g20ir.ir.Protocol.Denon, 2, cmd))
+        return listOf(
+            CodeSet(
+                brand, category, listOf("Denon AVR (Google TV codes)"),
+                mapOf(
+                    io.github.g20ir.model.G20Key.POWER to d(193),
+                    io.github.g20ir.model.G20Key.VOL_UP to d(241),
+                    io.github.g20ir.model.G20Key.VOL_DOWN to d(242),
+                    io.github.g20ir.model.G20Key.MUTE to d(240),
+                ),
+            ),
+        )
     }
 
     data class Brand(val name: String, val codeSets: Int, val models: Int)

@@ -250,11 +250,18 @@ class G20Remote(
      * Writes a complete IR table in one programming session (the firmware clears the table on
      * start, so keys not listed here go back to normal Bluetooth behaviour).
      */
-    suspend fun program(entries: List<Pair<Int, ByteArray>>) {
+    /**
+     * @param allowLong let Android split codes longer than one write into a BLE long write
+     *   (prepare + execute). Google's reference firmware can't reassemble those; other
+     *   firmwares might, so it is an opt-in experiment.
+     */
+    suspend fun program(entries: List<Pair<Int, ByteArray>>, allowLong: Boolean = false) {
         // 5 keys, plus Input possibly written under both of its key IDs (one is ignored).
         require(entries.size <= 6) { "too many keys" }
         for ((id, code) in entries) {
-            if (code.size > maxWrite) {
+            if (code.size > maxWrite && allowLong) {
+                log("  key 0x%04X: %d bytes > %d, sending as a long write (experimental)".format(id, code.size, maxWrite))
+            } else if (code.size > maxWrite) {
                 throw IllegalStateException("code for key 0x%04X is ${code.size} bytes; this link carries $maxWrite per write".format(id))
             }
         }

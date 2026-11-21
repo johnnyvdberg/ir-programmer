@@ -82,6 +82,21 @@ class EncoderTest {
         println("LG captured = NEC addr 0x%02X cmd 0x%02X".format(addr, cmd))
     }
 
+    /** Google's captured Denon codes (tools/legacy/dec.py), reproduced byte for byte. */
+    @Test
+    fun denonMatchesGoogleCapturedCodes() {
+        val captured = mapOf(
+            241L to capturedDenon,
+            242L to "0221017c0020123c000c001a000c0040000c001a000c001a000c001a000c001a000c0040000c001a000c001a000c0040000c0040000c0040000c0040000c001a000c001a000c05f4000c001a000c0040000c001a000c001a000c001a000c0040000c001a000c0040000c0040000c001a000c001a000c001a000c001a000c0040000c0040000c05f4",
+            240L to "0221017c0020123c000c001a000c0040000c001a000c001a000c001a000c001a000c001a000c001a000c001a000c0040000c0040000c0040000c0040000c001a000c001a000c05f4000c001a000c0040000c001a000c001a000c001a000c0040000c0040000c0040000c0040000c001a000c001a000c001a000c001a000c0040000c0040000c05f4",
+            193L to "0221017c0020123c000c001a000c0040000c001a000c001a000c001a000c0040000c001a000c001a000c001a000c001a000c001a000c0040000c0040000c001a000c001a000c05f4000c001a000c0040000c001a000c001a000c001a000c001a000c0040000c0040000c0040000c0040000c0040000c001a000c001a000c0040000c0040000c05f4",
+        )
+        for ((cmd, hex) in captured) {
+            val b = G20Payload.build(IrSignal.Parsed(Protocol.Denon, 2, cmd), G20Payload.ABSOLUTE_MAX_BYTES)
+            assertEquals("Denon 2/$cmd", hex, b.hex)
+        }
+    }
+
     @Test
     fun capturedPayloadsAreAcceptedAsIs() {
         for (h in listOf(capturedLg, capturedDenon)) {

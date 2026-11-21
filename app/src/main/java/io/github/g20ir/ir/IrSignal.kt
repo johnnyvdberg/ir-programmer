@@ -17,7 +17,10 @@ enum class Protocol(val id: String, val carrierHz: Int, val addressBits: Int, va
     SIRC20("SIRC20", 40000, 13, 7),
     Kaseikyo("Kaseikyo", 38000, 26, 10),
     RCA("RCA", 38000, 4, 8),
-    Pioneer("Pioneer", 40000, 8, 8);
+    Pioneer("Pioneer", 40000, 8, 8),
+
+    /** Denon's own 15-bit protocol (Sharp-style): frame + inverted frame. Address 2 = amplifier. */
+    Denon("Denon", 38000, 5, 8);
 
     val maxAddress: Long get() = (1L shl addressBits) - 1
     val maxCommand: Long get() = (1L shl commandBits) - 1

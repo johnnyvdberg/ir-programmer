@@ -117,6 +117,7 @@ data class UiState(
     val transferUrls: List<String> = emptyList(),
     val exportPath: String? = null,
     val codeFormat: G20Payload.Format = G20Payload.Format.SIMPLE,
+    val allowLongCodes: Boolean = false,
 ) {
     /** Whether the remote holds exactly the saved codes. null = unknown. */
     val inSync: Boolean? get() = applied?.let { a -> a.keys.mapValues { it.value.signal } == config.keys.mapValues { it.value.signal } }
@@ -146,6 +147,7 @@ class AppViewModel @JvmOverloads constructor(
                 config = (addr?.let { loadConfig("config:$it") } ?: loadConfig("config")) ?: RemoteConfig(),
                 applied = addr?.let { loadConfig("applied:$it") },
                 inputKeyId = prefs.getInt(addr?.let { "inputKeyId:$it" } ?: "inputKeyId", prefs.getInt("inputKeyId", AUTO_INPUT_ID)),
+                allowLongCodes = prefs.getBoolean("allowLongCodes", false),
                 codeFormat = runCatching { G20Payload.Format.valueOf(prefs.getString("codeFormat", null)!!) }
                     .getOrDefault(G20Payload.Format.SIMPLE),
             )
@@ -272,8 +274,17 @@ class AppViewModel @JvmOverloads constructor(
 
     private fun keyIdOf(k: G20Key) = keyIdsOf(k).first()
 
-    private fun maxBytes(): Int = (remote?.maxWrite ?: G20Payload.DEFAULT_MAX_BYTES)
-        .coerceAtMost(G20Payload.ABSOLUTE_MAX_BYTES)
+    private fun maxBytes(): Int =
+        if (_ui.value.allowLongCodes) G20Payload.ABSOLUTE_MAX_BYTES
+        else (remote?.maxWrite ?: G20Payload.DEFAULT_MAX_BYTES).coerceAtMost(G20Payload.ABSOLUTE_MAX_BYTES)
+
+    /** Experimental: codes bigger than one Bluetooth write, sent as a long write. */
+    fun toggleLongCodes() {
+        val on = !_ui.value.allowLongCodes
+        prefs.edit().putBoolean("allowLongCodes", on).apply()
+        _ui.update { it.copy(allowLongCodes = on) }
+        toast(if (on) "Long codes allowed (experimental). Test one key before relying on it." else "Long codes off.")
+    }
 
     /** Encodes a signal for the remote, or returns an explanation of why it can't. */
     fun tryBuild(s: IrSignal): Result<G20Payload.Built> =
@@ -300,7 +311,7 @@ class AppViewModel @JvmOverloads constructor(
         }
         val built = signals.filterKeys { it !in failed }
         setApplied(null) // unknown while writing; a failure part-way leaves the remote unknown
-        r.program(entries)
+        r.program(entries, _ui.value.allowLongCodes)
         val cfg = _ui.value.config
         setApplied(RemoteConfig(built.mapValues { (k, sig) ->
             Assignment(sig, cfg.keys[k]?.takeIf { it.signal == sig }?.source ?: "Test, not saved")

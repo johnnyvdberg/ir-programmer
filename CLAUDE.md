@@ -75,7 +75,13 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
   gap, re-sent while held. Confirmed on the owner's remote (SIRC 1/18 type 2 works).
 - REFERENCE format (optional, for Google reference firmware): NEC*/Samsung type 3 = frame +
   repeat code; SIRC type 3 = N frames + 1 repeat; RC5/RC6 type 4 toggle.
-- Not usable (too long): Kaseikyo (Panasonic), NEC42, some raw captures
+- Not usable (too long): Kaseikyo (Panasonic), NEC42, some raw captures, unless
+  Diagnostics → "Long codes" (experimental) lets Android send them as a BLE long write.
+- Denon protocol (own encoder, matches Google's captured payloads byte for byte): addr 5 +
+  cmd 8 + ext 2 bits, frame + inverted frame; 12/26/64 cycles, ~40 ms gaps. Built-in code set
+  "Denon AVR (Google TV codes)": addr 2, power 193, vol+ 241, vol- 242, mute 240; 136 B, so
+  on the owner's remote (128 B max) it needs long codes. Modern Denon AVRs (RC-1253, AVR-X)
+  in Flipper-IRDB are Kaseikyo vendor 0x3254 (208 B).
 
 ## Owner's remote (from Check remote)
 - Firmware `sdk044_google_ssu`, hardware `wd2308`, software `V01.06`: not the exact

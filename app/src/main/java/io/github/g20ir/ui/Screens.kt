@@ -463,6 +463,13 @@ fun DiagnosticsScreen(vm: AppViewModel, ui: UiState) {
                     "which only Google's reference firmware handles. Write the saved codes again after switching.",
             ) { vm.toggleCodeFormat() }
         }
+        item {
+            Item(
+                "Long codes: " + if (ui.allowLongCodes) "allowed (experimental)" else "off",
+                "Codes over ${ui.mtu - 3} bytes (e.g. Denon receivers, 136 bytes) are sent as a Bluetooth long write. " +
+                    "Not every remote firmware stores them correctly: test one key first.",
+            ) { vm.toggleLongCodes() }
+        }
         item { Item("Turn key reports off", "Stops the remote reporting IR key presses to the Shield") { vm.setNotifications(false) } }
         item { Item("Turn key reports on") { vm.setNotifications(true) } }
         item { Section("Saved payloads") }
