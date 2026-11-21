@@ -27,6 +27,8 @@ import io.github.g20ir.ui.Role
 import io.github.g20ir.ui.Screen
 import io.github.g20ir.ui.TestState
 import io.github.g20ir.ui.UiState
+import io.github.g20ir.ui.CheckState
+import io.github.g20ir.model.ConfigIo
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
@@ -66,7 +68,7 @@ class ScreenshotTest {
     )
 
     private val connected: (UiState) -> UiState = {
-        it.copy(remoteName = "G20 Remote", remoteState = G20Remote.State.READY, mtu = 180)
+        it.copy(remoteName = "G20 Remote", remoteState = G20Remote.State.READY, mtu = 180, remoteAddress = "F4:22:7A:00:11:22")
     }
 
     private fun shot(state: (UiState) -> UiState) {
@@ -106,8 +108,34 @@ class ScreenshotTest {
         it.copy(screen = Screen.Test, config = sonyConfig,
             test = test(Phase.DONE, G20Key.POWER, verifying = true, confirmed = G20Key.entries.toSet(), msg = "All keys work."))
     }
-    @Test fun s8_home_configured() = shot { it.copy(config = sonyConfig) }
+    @Test fun s8_home_configured() = shot { it.copy(config = sonyConfig, applied = sonyConfig) }
     @Test fun s9_edit_key() = shot { it.copy(config = sonyConfig, screen = Screen.EditKey(G20Key.INPUT)) }
+    @Test fun s10_check_remote() = shot {
+        it.copy(
+            config = sonyConfig.with(G20Key.POWER, null),
+            screen = Screen.CheckRemote,
+            check = CheckState(
+                info = listOf(
+                    "Manufacturer" to "Ohsung", "Model" to "G20", "Firmware" to "V1.08",
+                    "Battery" to "87 %", "Address" to "F4:22:7A:00:11:22", "MTU" to "180 (max 177 bytes per code)",
+                ),
+                loading = false,
+                results = mapOf(
+                    G20Key.VOL_UP to "Sends IR (reported by the remote)",
+                    G20Key.MUTE to "Sends Bluetooth (no IR code)",
+                    G20Key.INPUT to "Sends IR (reported by the remote)",
+                ),
+            ),
+        )
+    }
+    @Test fun s11_transfer() = shot {
+        it.copy(config = sonyConfig, screen = Screen.Transfer, transferUrls = listOf("http://192.168.1.42:8080/"),
+            exportPath = "/storage/emulated/0/Android/data/io.github.g20ir/files/g20-ir-config.json")
+    }
+    @Test fun s12_import_confirm() = shot {
+        it.copy(config = sonyConfig, screen = Screen.Transfer,
+            pendingImport = ConfigIo.import(ConfigIo.export(sonyConfig, G20Key.INPUT.keyId)))
+    }
 }
 
 /** An Application backed by the layoutlib context, with in-memory preferences. */

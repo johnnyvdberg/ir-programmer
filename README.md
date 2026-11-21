@@ -27,6 +27,25 @@ You can also set any key by hand:
   commands until the TV reacts.
 - **Paste a code:** Pronto hex, a raw G20 payload, or raw µs timings.
 
+## Check remote, export and import
+
+- **Check remote** shows the firmware version and battery, then asks you to press each key.
+  A key with an IR code is reported by the remote itself; a key without one arrives as a
+  normal Bluetooth key. The stored codes themselves can't be read back: the firmware has no
+  read access to its IR table.
+- Settings are stored **per remote** (by Bluetooth address). For each remote the app also
+  remembers exactly what it last wrote successfully, and the home screen says whether the
+  remote holds the saved codes.
+- **Export / import**: while that screen is open the TV serves a small page on port 8080
+  (for example `http://192.168.1.42:8080/`). From a phone or PC you can download
+  `g20-ir-config.json` or upload one; uploads must be confirmed on the TV. The same file is
+  also kept in `Android/data/io.github.g20ir/files/` for `adb pull` / `adb push`.
+
+  File format: `{"format": "g20-ir-setup", "version": 1, "inputKeyId": "0x00B2",
+  "keys": {"power": {"signal": ["SIRC", 1, 21], "source": "...", "g20": "...", "pronto": "..."}}}`.
+  On import each key needs one of `signal`, `g20` or `pronto`, so a hand-written file with
+  only Pronto codes works.
+
 ## Code database
 
 `app/src/main/assets/irdb.json` comes from [Flipper-IRDB](https://github.com/Lucaslhm/Flipper-IRDB)

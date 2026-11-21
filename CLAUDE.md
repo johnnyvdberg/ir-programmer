@@ -13,11 +13,19 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
   - `ir/G20Payload.kt`: waveform → G20 payload (type selection, size fitting)
   - `ir/TextFormats.kt`: Pronto / G20 hex / raw µs parsing, Pronto export
   - `ble/G20Remote.kt`: GATT client (program, clear, suppress, key-event notifications)
-  - `ui/AppViewModel.kt`: guided test state machine, manual editor, persistence
+  - `ui/AppViewModel.kt`: guided test state machine, manual editor, check screen,
+    export/import, persistence (prefs keys `config:<MAC>`, `applied:<MAC>`, `inputKeyId:<MAC>`;
+    legacy un-keyed `config` migrates to the first remote that connects)
+  - `model/ConfigIo.kt`: export/import JSON format
+  - `net/WebTransfer.kt`: tiny HTTP server (port 8080, fallback random) for export/import,
+    only while the Export/import screen is open
 - `tools/build_irdb.py`: Flipper-IRDB (CC0) → `app/src/main/assets/irdb.json`
 - `tools/legacy/`: original Python converter + Sony generator + captured payloads
-- Tests: `./gradlew :app:testDebugUnitTest` (Sony frame, Google-captured LG NEC code,
-  Pronto round trip, RC5/RC6 lengths, whole-DB encode stats)
+- Tests: `./gradlew :app:testDebugUnitTest` (encoders vs Sony frame and Google-captured LG
+  NEC code, Pronto round trip, RC5/RC6, whole-DB encode stats, export/import, web server,
+  Paparazzi screenshots; re-record with `:app:recordPaparazziDebug`)
+- Releases: Actions "Release APK" (manual run with a tag input, or push a v* tag). Signing key
+  only via secrets KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD; never commit keys.
 
 ## Firmware facts (verified in refDesignRcu source, commit 66b7eb9)
 - No IR learning: the firmware has no IR receive path. Hence the guided-test design.
@@ -36,6 +44,11 @@ power 21, vol+ 18, vol- 19, mute 20, input 37), the same as the hand-derived gue
 - Flash slot ~256 B per key (5 keys per 1280 B), 14-bit pulse counts (max 16383 cycles).
 - `programmed_key_count` caps at 5: writing the same key twice in a session uses a slot.
 - 30 s programming timeout, restarted on every write.
+- The IR table can NOT be read back: all IR characteristics are backed by a 1-byte dummy
+  (`ir_data`) with no read callback. `applied:<MAC>` (what the app last wrote) is the only record.
+- Back to Bluetooth: suppress write (RAM only, reset on every disconnect by
+  `ir_suppress_reinit`); empty program session (persistent, keeps bond); bonding to another
+  host; factory reset (centre+mute ~4 s, also deletes the bond).
 
 ## Payload format (big-endian u16 words)
 - byte0 type, byte1 duty % (0x21), word1 carrier/100 Hz

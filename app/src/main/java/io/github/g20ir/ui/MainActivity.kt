@@ -26,6 +26,13 @@ import androidx.tv.material3.darkColorScheme
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
+    /** Lets the "Check remote" screen see keys that arrive as normal Bluetooth key events. */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        vm.onAndroidKey(event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        vm.onAndroidKey(event) || super.onKeyUp(keyCode, event)
+
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.autoConnect() else vm.toast("Bluetooth permission is needed to talk to the remote.")
     }
@@ -75,6 +82,8 @@ fun App(vm: AppViewModel) {
                         Screen.Test -> TestScreen(vm, ui)
                         is Screen.EditKey -> EditKeyScreen(vm, ui, s.key)
                         Screen.Diagnostics -> DiagnosticsScreen(vm, ui)
+                        Screen.CheckRemote -> CheckRemoteScreen(vm, ui)
+                        Screen.Transfer -> TransferScreen(vm, ui)
                     }
                 }
                 StatusOverlay(ui, vm)

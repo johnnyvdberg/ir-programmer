@@ -45,6 +45,18 @@ class G20Remote(
         val KEY_EVENT: UUID = uuid("c5") // notify: [0 down / 1 up, keyIdHi, keyIdLo]
         val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         private const val OP_TIMEOUT_MS = 6000L
+
+        private fun sig16(x: Int): UUID = UUID.fromString("0000%04x-0000-1000-8000-00805f9b34fb".format(x))
+        private val DEVICE_INFO = sig16(0x180A)
+        private val BATTERY = sig16(0x180F)
+        private val BATTERY_LEVEL = sig16(0x2A19)
+        private val INFO_FIELDS = listOf(
+            "Manufacturer" to sig16(0x2A29),
+            "Model" to sig16(0x2A24),
+            "Firmware" to sig16(0x2A26),
+            "Hardware" to sig16(0x2A27),
+            "Software" to sig16(0x2A28),
+        )
     }
 
     enum class State { DISCONNECTED, CONNECTING, READY, FAILED }
@@ -66,6 +78,7 @@ class G20Remote(
     private var gatt: BluetoothGatt? = null
     private val opLock = Mutex()
     private var pending: CompletableDeferred<Int>? = null
+    private var readPending: CompletableDeferred<ByteArray?>? = null
     private var connected = CompletableDeferred<Boolean>()
     private var discovered = CompletableDeferred<Boolean>()
     private var mtuDone = CompletableDeferred<Int>()
@@ -95,6 +108,15 @@ class G20Remote(
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
             pending?.complete(status)
+        }
+
+        override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+            readPending?.complete(if (status == BluetoothGatt.GATT_SUCCESS) value else null)
+        }
+
+        @Deprecated("Used on Android 12 and older")
+        override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            if (Build.VERSION.SDK_INT < 33) readPending?.complete(if (status == BluetoothGatt.GATT_SUCCESS) c.value else null)
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
@@ -197,6 +219,31 @@ class G20Remote(
         if (!started) throw IllegalStateException("descriptor write was not accepted by Android")
         val status = withTimeoutOrNull(OP_TIMEOUT_MS) { p.await() } ?: throw IllegalStateException("descriptor write timed out")
         if (status != BluetoothGatt.GATT_SUCCESS) throw IllegalStateException("descriptor write failed, status $status")
+    }
+
+    private suspend fun read(service: UUID, uuid: UUID): ByteArray? = opLock.withLock {
+        val g = gatt ?: return@withLock null
+        val c = g.getService(service)?.getCharacteristic(uuid) ?: return@withLock null
+        val d = CompletableDeferred<ByteArray?>()
+        readPending = d
+        @Suppress("DEPRECATION")
+        if (!g.readCharacteristic(c)) return@withLock null
+        withTimeoutOrNull(OP_TIMEOUT_MS) { d.await() }
+    }
+
+    /**
+     * Device information and battery level. The IR table itself cannot be read: the firmware
+     * backs all IR characteristics with a 1-byte dummy value and has no read handler.
+     */
+    suspend fun deviceInfo(): List<Pair<String, String>> {
+        val out = mutableListOf<Pair<String, String>>()
+        for ((label, uuid) in INFO_FIELDS) {
+            read(DEVICE_INFO, uuid)?.let { v -> out += label to String(v, Charsets.UTF_8).trim { it <= ' ' } }
+        }
+        read(BATTERY, BATTERY_LEVEL)?.firstOrNull()?.let { out += "Battery" to "${it.toInt() and 0xFF} %" }
+        out += "Address" to device.address
+        out += "MTU" to "$mtu (max $maxWrite bytes per code)"
+        return out
     }
 
     /**

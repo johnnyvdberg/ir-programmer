@@ -14,6 +14,10 @@ import io.github.g20ir.ir.G20Payload
 import io.github.g20ir.ir.IrSignal
 import io.github.g20ir.model.Assignment
 import io.github.g20ir.model.CodeSet
+import io.github.g20ir.model.ConfigIo
+import io.github.g20ir.net.WebTransfer
+import android.view.KeyEvent
+import java.io.File
 import io.github.g20ir.model.G20Key
 import io.github.g20ir.model.RemoteConfig
 import kotlinx.coroutines.Job
@@ -59,7 +63,16 @@ sealed interface Screen {
     data object Test : Screen
     data class EditKey(val key: G20Key) : Screen
     data object Diagnostics : Screen
+    data object CheckRemote : Screen
+    data object Transfer : Screen
 }
+
+data class CheckState(
+    val info: List<Pair<String, String>> = emptyList(),
+    val loading: Boolean = true,
+    /** Per key: how the last press arrived. */
+    val results: Map<G20Key, String> = emptyMap(),
+)
 
 enum class Phase { PROGRAMMING, WAIT_PRESS, ASK, NO_MATCH, DONE, ERROR }
 
@@ -90,7 +103,18 @@ data class UiState(
     val log: List<String> = emptyList(),
     /** Manual editor: signal currently on the remote for trial, not yet saved. */
     val trial: Pair<G20Key, Assignment>? = null,
-)
+    /** Bluetooth address of the selected remote; settings are stored per address. */
+    val remoteAddress: String? = null,
+    /** What this app last wrote to the remote successfully (null = unknown). */
+    val applied: RemoteConfig? = null,
+    val check: CheckState? = null,
+    val pendingImport: ConfigIo.Imported? = null,
+    val transferUrls: List<String> = emptyList(),
+    val exportPath: String? = null,
+) {
+    /** Whether the remote holds exactly the saved codes. null = unknown. */
+    val inSync: Boolean? get() = applied?.let { a -> a.keys.mapValues { it.value.signal } == config.keys.mapValues { it.value.signal } }
+}
 
 @SuppressLint("MissingPermission")
 class AppViewModel @JvmOverloads constructor(
@@ -103,12 +127,18 @@ class AppViewModel @JvmOverloads constructor(
         CodeDatabase(dbJson?.invoke() ?: app.assets.open("irdb.json").bufferedReader().readText())
     }
 
+    private fun loadConfig(key: String): RemoteConfig? =
+        prefs.getString(key, null)?.let { runCatching { RemoteConfig.fromJson(JSONObject(it)) }.getOrNull() }
+
     private val _ui = MutableStateFlow(
-        UiState(
-            config = prefs.getString("config", null)?.let { runCatching { RemoteConfig.fromJson(JSONObject(it)) }.getOrNull() }
-                ?: RemoteConfig(),
-            inputKeyId = prefs.getInt("inputKeyId", G20Key.INPUT.keyId),
-        ),
+        prefs.getString("remote", null).let { addr ->
+            UiState(
+                remoteAddress = addr,
+                config = (addr?.let { loadConfig("config:$it") } ?: loadConfig("config")) ?: RemoteConfig(),
+                applied = addr?.let { loadConfig("applied:$it") },
+                inputKeyId = prefs.getInt(addr?.let { "inputKeyId:$it" } ?: "inputKeyId", prefs.getInt("inputKeyId", G20Key.INPUT.keyId)),
+            )
+        },
     )
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
@@ -134,6 +164,8 @@ class AppViewModel @JvmOverloads constructor(
             is Screen.PickCode -> go(Screen.PickBrand(null, s.category, s.key))
             is Screen.Test -> cancelTest()
             is Screen.EditKey -> leaveEditor()
+            is Screen.Transfer -> closeTransfer()
+            is Screen.CheckRemote -> { _ui.update { it.copy(check = null) }; go(Screen.Home) }
             else -> go(Screen.Home)
         }
     }
@@ -170,12 +202,35 @@ class AppViewModel @JvmOverloads constructor(
             val ok = try { r.connect() } catch (e: SecurityException) { log("permission: ${e.message}"); false }
             _ui.update { it.copy(busy = null, mtu = r.mtu) }
             if (ok) {
-                prefs.edit().putString("remote", dev.address).apply()
+                selectRemote(dev.address)
                 eventsJob = launch { r.keyEvents.collect { onKeyEvent(it) } }
                 toast("Connected. Up to ${r.maxWrite} bytes per code.")
             } else {
                 toast("Could not use ${safeName(dev)} – see Diagnostics. Is it the G20 remote?")
             }
+        }
+    }
+
+    /**
+     * Switches to the settings stored for this remote's Bluetooth address. The first time, the
+     * settings from before per-remote storage existed are moved over to it.
+     */
+    private fun selectRemote(addr: String) {
+        val e = prefs.edit().putString("remote", addr)
+        var cfg = loadConfig("config:$addr")
+        if (cfg == null) {
+            cfg = loadConfig("config") ?: RemoteConfig()
+            e.putString("config:$addr", cfg.toJson().toString()).remove("config")
+            if (prefs.contains("inputKeyId")) e.putInt("inputKeyId:$addr", prefs.getInt("inputKeyId", G20Key.INPUT.keyId)).remove("inputKeyId")
+        }
+        e.apply()
+        _ui.update {
+            it.copy(
+                remoteAddress = addr,
+                config = cfg,
+                applied = loadConfig("applied:$addr"),
+                inputKeyId = prefs.getInt("inputKeyId:$addr", G20Key.INPUT.keyId),
+            )
         }
     }
 
@@ -212,14 +267,31 @@ class AppViewModel @JvmOverloads constructor(
                 { log("${k.label}: ${it.message}"); failed += k; null },
             )
         }
+        val built = signals.filterKeys { it !in failed }
+        setApplied(null) // unknown while writing; a failure part-way leaves the remote unknown
         r.program(entries)
+        val cfg = _ui.value.config
+        setApplied(RemoteConfig(built.mapValues { (k, sig) ->
+            Assignment(sig, cfg.keys[k]?.takeIf { it.signal == sig }?.source ?: "Test, not saved")
+        }))
         return failed
+    }
+
+    private fun setApplied(c: RemoteConfig?) {
+        val addr = _ui.value.remoteAddress
+        if (addr != null) {
+            val e = prefs.edit()
+            if (c == null) e.remove("applied:$addr") else e.putString("applied:$addr", c.toJson().toString())
+            e.apply()
+        }
+        _ui.update { it.copy(applied = c) }
     }
 
     private fun savedSignals(): Map<G20Key, IrSignal> = _ui.value.config.keys.mapValues { it.value.signal }
 
     private fun saveConfig(c: RemoteConfig) {
-        prefs.edit().putString("config", c.toJson().toString()).apply()
+        val addr = _ui.value.remoteAddress
+        prefs.edit().putString(if (addr != null) "config:$addr" else "config", c.toJson().toString()).apply()
         _ui.update { it.copy(config = c) }
     }
 
@@ -244,7 +316,9 @@ class AppViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             _ui.update { it.copy(busy = "Clearing IR codes…") }
             try {
-                r.clearAll(); toast("All keys send Bluetooth again (codes kept in this app).")
+                r.clearAll()
+                setApplied(RemoteConfig())
+                toast("All keys send Bluetooth again (codes kept in this app).")
             } catch (e: Exception) {
                 log("error: ${e.message}"); toast("Failed: ${e.message}")
             }
@@ -253,7 +327,8 @@ class AppViewModel @JvmOverloads constructor(
     }
 
     fun setInputKeyId(id: Int) {
-        prefs.edit().putInt("inputKeyId", id).apply()
+        val addr = _ui.value.remoteAddress
+        prefs.edit().putInt(if (addr != null) "inputKeyId:$addr" else "inputKeyId", id).apply()
         _ui.update { it.copy(inputKeyId = id) }
     }
 
@@ -332,7 +407,14 @@ class AppViewModel @JvmOverloads constructor(
         }
     }
 
+    private fun keyForId(id: Int): G20Key? =
+        if (id == G20Key.MAGIC_KEY_ID) G20Key.INPUT else G20Key.entries.firstOrNull { keyIdOf(it) == id }
+
     private fun onKeyEvent(ev: G20Remote.KeyEvent) {
+        if (_ui.value.screen == Screen.CheckRemote) {
+            if (ev.down) keyForId(ev.keyId)?.let { markCheck(it, "Sends IR (reported by the remote)") }
+            return
+        }
         val t = _ui.value.test ?: return
         if (!ev.down || t.phase != Phase.WAIT_PRESS || _ui.value.screen != Screen.Test) return
         if (ev.keyId == keyIdOf(t.key) || (t.key == G20Key.INPUT && ev.keyId == G20Key.MAGIC_KEY_ID)) {
@@ -509,7 +591,92 @@ class AppViewModel @JvmOverloads constructor(
     @androidx.annotation.VisibleForTesting
     fun setStateForPreview(f: (UiState) -> UiState) = _ui.update(f)
 
+    // ---------------------------------------------------------------- check remote
+
+    fun openCheck() {
+        val r = ready() ?: return
+        _ui.update { it.copy(screen = Screen.CheckRemote, check = CheckState()) }
+        viewModelScope.launch {
+            try { r.setKeyNotifications(true) } catch (e: Exception) { log("key reports: ${e.message}") }
+            val info = try { r.deviceInfo() } catch (e: Exception) { log("info: ${e.message}"); emptyList() }
+            _ui.update { it.copy(check = (it.check ?: CheckState()).copy(info = info, loading = false)) }
+        }
+    }
+
+    private fun markCheck(k: G20Key, how: String) =
+        _ui.update { s -> s.copy(check = s.check?.let { it.copy(results = it.results + (k to how)) }) }
+
+    /**
+     * Android key events reaching the app while the check screen is open: a key without an IR
+     * code arrives here as a normal Bluetooth key. Returns true to swallow it (so the volume
+     * doesn't change while checking).
+     */
+    fun onAndroidKey(e: KeyEvent): Boolean {
+        if (_ui.value.screen != Screen.CheckRemote) return false
+        val k = when (e.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> G20Key.VOL_UP
+            KeyEvent.KEYCODE_VOLUME_DOWN -> G20Key.VOL_DOWN
+            KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_MUTE -> G20Key.MUTE
+            KeyEvent.KEYCODE_TV_INPUT -> G20Key.INPUT
+            KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_TV_POWER -> G20Key.POWER
+            else -> return false
+        }
+        if (e.action == KeyEvent.ACTION_DOWN && e.repeatCount == 0) markCheck(k, "Sends Bluetooth (no IR code)")
+        return true
+    }
+
+    // ---------------------------------------------------------------- export / import
+
+    private var web: WebTransfer? = null
+
+    fun exportText(): String = ConfigIo.export(_ui.value.config, _ui.value.inputKeyId)
+
+    private fun exportFile(): File? = getApplication<Application>().getExternalFilesDir(null)?.let { File(it, ConfigIo.FILE_NAME) }
+
+    fun openTransfer() {
+        val f = exportFile()
+        val path = try { f?.writeText(exportText()); f?.absolutePath } catch (e: Exception) { log("export file: ${e.message}"); null }
+        val w = web ?: WebTransfer(::exportText, ::receiveImport, ::log).also { web = it }
+        w.start()
+        _ui.update { it.copy(screen = Screen.Transfer, transferUrls = w.urls(), exportPath = path, pendingImport = null) }
+    }
+
+    private fun closeTransfer() {
+        web?.stop()
+        _ui.update { it.copy(screen = Screen.Home, pendingImport = null, transferUrls = emptyList()) }
+    }
+
+    /** Called from the web server thread. */
+    private fun receiveImport(text: String): String = try {
+        val imp = ConfigIo.import(text)
+        _ui.update { it.copy(pendingImport = imp) }
+        "Received ${imp.config.keys.size} key(s). Confirm on the TV." +
+            if (imp.warnings.isEmpty()) "" else " Skipped: ${imp.warnings.joinToString("; ")}"
+    } catch (e: IllegalArgumentException) {
+        "Not imported: ${e.message}"
+    }
+
+    /** Reads g20-ir-config.json from the app's folder (copy it there with adb). */
+    fun importFromFile() {
+        val f = exportFile()
+        if (f == null || !f.exists()) { toast("No file at ${f?.absolutePath}"); return }
+        val msg = receiveImport(f.readText())
+        if (_ui.value.pendingImport == null) toast(msg)
+    }
+
+    fun applyImport(write: Boolean) {
+        val imp = _ui.value.pendingImport ?: return
+        saveConfig(imp.config)
+        imp.inputKeyId?.let { setInputKeyId(it) }
+        _ui.update { it.copy(pendingImport = null) }
+        exportFile()?.let { runCatching { it.writeText(exportText()) } }
+        if (write) writeSaved() else toast("Imported. Use \"Write saved codes\" to send them to the remote.")
+    }
+
+    fun discardImport() = _ui.update { it.copy(pendingImport = null) }
+
     override fun onCleared() {
+        web?.stop()
         remote?.close()
     }
 }

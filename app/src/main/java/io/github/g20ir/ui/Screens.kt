@@ -125,7 +125,13 @@ fun HomeScreen(vm: AppViewModel, ui: UiState) {
         G20Remote.State.FAILED -> "Could not use ${ui.remoteName}"
         G20Remote.State.DISCONNECTED -> if (ui.remoteName == null) "No remote selected" else "${ui.remoteName} disconnected"
     }
-    Title("G20 remote IR setup", status)
+    val sync = when {
+        ui.remoteAddress == null -> null
+        ui.inSync == true -> "On the remote: the saved codes"
+        ui.inSync == false -> "On the remote: different from the saved codes – use \"Write saved codes\""
+        else -> "On the remote: unknown – use \"Write saved codes\" to be sure"
+    }
+    Title("G20 remote IR setup", listOfNotNull(status, sync).joinToString("\n"))
     val first = rememberInitialFocus()
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
         LazyColumn(Modifier.weight(1f)) {
@@ -139,6 +145,8 @@ fun HomeScreen(vm: AppViewModel, ui: UiState) {
                 item { Item("Reconnect", ui.remoteName) { vm.autoConnect() } }
             }
             item { Item("Choose remote", "Pick the paired G20 remote") { vm.go(Screen.PickRemote) } }
+            item { Item("Check remote", "Firmware, battery, and which keys send IR") { vm.openCheck() } }
+            item { Item("Export / import", "Save or load settings from a phone or PC browser") { vm.openTransfer() } }
             item { Item("Clear IR codes on the remote", "All keys control the Shield again") { vm.clearRemote() } }
             item { Item("Diagnostics", "Log, payloads, input key ID") { vm.go(Screen.Diagnostics) } }
         }
@@ -455,5 +463,96 @@ fun DiagnosticsScreen(vm: AppViewModel, ui: UiState) {
         }
         item { Section("About") }
         item { Body("Code database: ${vm.db.source}") }
+    }
+}
+
+// ------------------------------------------------------------------ check remote
+
+@Composable
+fun CheckRemoteScreen(vm: AppViewModel, ui: UiState) {
+    val c = ui.check ?: return
+    Title(
+        "Check remote",
+        "The remote can't report its stored codes, so press each key: the app sees whether it sends IR or Bluetooth.",
+    )
+    val first = rememberInitialFocus()
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+        Column(Modifier.weight(1f)) {
+            Section("Remote")
+            if (c.loading) Body("Reading…")
+            for ((k, v) in c.info) Body("$k: $v")
+            Section("Saved for this remote")
+            for (k in G20Key.entries) {
+                val a = ui.config.keys[k]
+                Body("${k.label}: ${a?.signal?.describe() ?: "not set (Bluetooth)"}")
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = { vm.back() }, modifier = Modifier.focusRequester(first)) { Text("Done") }
+        }
+        Column(Modifier.weight(1f)) {
+            Section("Press each key on the remote")
+            for (k in G20Key.entries) {
+                val r = c.results[k]
+                val expected = if (ui.config.keys.containsKey(k)) "IR" else "Bluetooth"
+                val ok = r == null || (r.startsWith("Sends IR") == (expected == "IR"))
+                Text(
+                    "${k.label}: ${r ?: "not pressed yet"}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (ok) MaterialTheme.colorScheme.onBackground else Color(0xFFFF8A80),
+                )
+                if (!ok) Body("  Expected $expected from the saved settings – try \"Write saved codes\".", Color(0xFFFF8A80))
+            }
+            Spacer(Modifier.height(8.dp))
+            Body("Power often never reaches apps when it sends Bluetooth, so it may stay \"not pressed\".")
+        }
+    }
+}
+
+// ------------------------------------------------------------------ export / import
+
+@Composable
+fun TransferScreen(vm: AppViewModel, ui: UiState) {
+    Title("Export / import", "Settings for ${ui.remoteName ?: "this remote"}")
+    val imp = ui.pendingImport
+    if (imp != null) {
+        val fr = rememberInitialFocus(imp)
+        Section("Received settings")
+        for (k in G20Key.entries) {
+            val a = imp.config.keys[k]
+            Body("${k.label}: ${a?.let { "${it.signal.describe()} (${it.source})" } ?: "not set (Bluetooth)"}")
+        }
+        if (imp.warnings.isNotEmpty()) Body("Skipped: ${imp.warnings.joinToString("; ")}", Color(0xFFFFB74D))
+        Body("This replaces the saved settings for this remote.")
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { vm.applyImport(write = true) }, modifier = Modifier.focusRequester(fr)) { Text("Import and write to remote") }
+            OutlinedButton(onClick = { vm.applyImport(write = false) }) { Text("Import only") }
+            OutlinedButton(onClick = { vm.discardImport() }) { Text("Discard") }
+        }
+        return
+    }
+    val first = rememberInitialFocus()
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+        Column(Modifier.weight(1f)) {
+            Section("From a phone or PC on the same network")
+            if (ui.transferUrls.isEmpty()) Body("No network address found.")
+            for (u in ui.transferUrls) {
+                Text(u, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.height(8.dp))
+            Body("Open this address in a browser to download the settings or upload a file. Uploaded settings show up here to confirm.")
+            Body("The page is only available while this screen is open.")
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = { vm.back() }, modifier = Modifier.focusRequester(first)) { Text("Done") }
+        }
+        Column(Modifier.weight(1f)) {
+            Section("With adb")
+            Body("The current settings are also saved as:")
+            Text(ui.exportPath ?: "-", fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = MaterialTheme.colorScheme.onBackground)
+            Spacer(Modifier.height(8.dp))
+            Body("adb pull that file to export. To import, adb push a file to the same path, then:")
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { vm.importFromFile() }) { Text("Import from that file") }
+        }
     }
 }
